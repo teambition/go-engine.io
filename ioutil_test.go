@@ -2,7 +2,7 @@ package engineio
 
 import (
 	"bytes"
-	"github.com/googollee/go-engine.io/parser"
+	"github.com/teambition/go-engine.io/parser"
 	"io"
 	"sync"
 	"testing"

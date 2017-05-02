@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/googollee/go-engine.io/message"
-	"github.com/googollee/go-engine.io/parser"
-	"github.com/googollee/go-engine.io/transport"
+	"github.com/teambition/go-engine.io/message"
+	"github.com/teambition/go-engine.io/parser"
+	"github.com/teambition/go-engine.io/transport"
 	. "github.com/smartystreets/goconvey/convey"
 )
 
