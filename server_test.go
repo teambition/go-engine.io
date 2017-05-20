@@ -5,13 +5,11 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/teambition/go-engine.io/parser"
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/teambition/go-engine.io/parser"
 )
 
 func TestServer(t *testing.T) {
@@ -29,7 +27,6 @@ func TestServer(t *testing.T) {
 		So(server.config.AllowUpgrades, ShouldBeFalse)
 		server.SetCookie("prefix")
 		So(server.config.Cookie, ShouldEqual, "prefix")
-		So(server.GetMaxConnection(), ShouldEqual, 1000)
 	})
 
 	Convey("Create server", t, func() {
@@ -41,36 +38,6 @@ func TestServer(t *testing.T) {
 			id2 := newId(req)
 			So(id1, ShouldNotEqual, id2)
 		})
-
-	})
-
-	Convey("Max connections", t, func() {
-		server, _ := NewServer(nil)
-		server.SetMaxConnection(1)
-
-		go func() {
-			for i := 0; i < 3; i++ {
-				server.Accept()
-			}
-		}()
-
-		req1 := newOpenReq()
-		res1 := httptest.NewRecorder()
-		server.ServeHTTP(res1, req1)
-		So(res1.Code, ShouldEqual, 200)
-
-		req2 := newOpenReq()
-		res2 := httptest.NewRecorder()
-		server.ServeHTTP(res2, req2)
-		So(res2.Code, ShouldEqual, 503)
-		So(strings.TrimSpace(string(res2.Body.Bytes())), ShouldEqual, "too many connections")
-
-		server.onClose(extractSid(res1.Body))
-
-		req3 := newOpenReq()
-		res3 := httptest.NewRecorder()
-		server.ServeHTTP(res3, req3)
-		So(res3.Code, ShouldEqual, 200)
 
 	})
 }

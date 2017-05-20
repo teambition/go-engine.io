@@ -16,7 +16,6 @@ import (
 type config struct {
 	PingTimeout   time.Duration
 	PingInterval  time.Duration
-	MaxConnection int
 	AllowRequest  func(*http.Request) error
 	AllowUpgrades bool
 	Cookie        string
@@ -52,7 +51,6 @@ func NewServer(transports []string) (*Server, error) {
 		config: config{
 			PingTimeout:   60000 * time.Millisecond,
 			PingInterval:  25000 * time.Millisecond,
-			MaxConnection: 1000,
 			AllowRequest:  func(*http.Request) error { return nil },
 			AllowUpgrades: true,
 			Cookie:        "io",
@@ -72,16 +70,6 @@ func (s *Server) SetPingTimeout(t time.Duration) {
 // SetPingInterval sets the interval of ping. Default is 25s.
 func (s *Server) SetPingInterval(t time.Duration) {
 	s.config.PingInterval = t
-}
-
-// SetMaxConnection sets the max connetion. Default is 1000.
-func (s *Server) SetMaxConnection(n int) {
-	s.config.MaxConnection = n
-}
-
-// GetMaxConnection returns the current max connection
-func (s *Server) GetMaxConnection() int {
-	return s.config.MaxConnection
 }
 
 // Count returns a count of current number of active connections in session
@@ -131,13 +119,6 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		n := atomic.AddInt32(&s.currentConnection, 1)
-		if int(n) > s.config.MaxConnection {
-			atomic.AddInt32(&s.currentConnection, -1)
-			http.Error(w, "too many connections", http.StatusServiceUnavailable)
-			return
-		}
-
 		sid = s.config.NewId(r)
 
 		var err error
@@ -146,6 +127,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		atomic.AddInt32(&s.currentConnection, 1)
 
 		s.serverSessions.Set(sid, conn)
 
