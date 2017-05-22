@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"fmt"
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	"github.com/teambition/go-engine.io/polling"
@@ -24,11 +23,10 @@ type config struct {
 
 // Server is the server of engine.io.
 type Server struct {
-	config            config
-	socketChan        chan Conn
-	serverSessions    Sessions
-	creaters          transportCreaters
-	currentConnection int32
+	config         config
+	socketChan     chan Conn
+	serverSessions Sessions
+	creaters       transportCreaters
 }
 
 // NewServer returns the server suppported given transports. If transports is nil, server will use ["polling", "websocket"] as default.
@@ -74,7 +72,7 @@ func (s *Server) SetPingInterval(t time.Duration) {
 
 // Count returns a count of current number of active connections in session
 func (s *Server) Count() int {
-	return int(atomic.LoadInt32(&s.currentConnection))
+	return s.serverSessions.Len()
 }
 
 // SetAllowRequest sets the middleware function when establish connection. If it return non-nil, connection won't be established. Default will allow all request.
@@ -127,10 +125,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		atomic.AddInt32(&s.currentConnection, 1)
-
 		s.serverSessions.Set(sid, conn)
-
 		s.socketChan <- conn
 	}
 	http.SetCookie(w, &http.Cookie{
@@ -156,7 +151,6 @@ func (s *Server) transports() transportCreaters {
 
 func (s *Server) onClose(id string) {
 	s.serverSessions.Remove(id)
-	atomic.AddInt32(&s.currentConnection, -1)
 }
 
 func newId(r *http.Request) string {
