@@ -372,13 +372,6 @@ func (c *serverConn) pingLoop() {
 			lastPing = time.Now()
 			lastTry = lastPing
 		case <-time.After(c.pingInterval - tryDiff):
-			c.writerLocker.Lock()
-			if w, _ := c.getCurrent().NextWriter(message.MessageText, parser.PING); w != nil {
-				writer := newConnWriter(w, &c.writerLocker)
-				writer.Close()
-			} else {
-				c.writerLocker.Unlock()
-			}
 			lastTry = time.Now()
 		case <-time.After(c.pingTimeout - pingDiff):
 			c.Close()

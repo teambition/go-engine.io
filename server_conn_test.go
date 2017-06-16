@@ -8,11 +8,11 @@ import (
 	"testing"
 	"time"
 
+	. "github.com/smartystreets/goconvey/convey"
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
 	"github.com/teambition/go-engine.io/polling"
 	"github.com/teambition/go-engine.io/websocket"
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 type FakeServer struct {
@@ -188,7 +188,7 @@ func TestConn(t *testing.T) {
 			So(pc.Response().StatusCode, ShouldEqual, http.StatusOK)
 
 			So(decoder.MessageType(), ShouldEqual, message.MessageText)
-			So(decoder.Type(), ShouldEqual, parser.PING)
+			So(decoder.Type(), ShouldEqual, parser.CLOSE)
 
 			So(conn.getCurrent(), ShouldNotBeNil)
 			So(conn.getUpgrade(), ShouldBeNil)
