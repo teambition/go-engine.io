@@ -9,6 +9,7 @@ import (
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
 	"github.com/teambition/go-engine.io/polling"
@@ -50,7 +51,11 @@ func (f *FakeServer) onClose(sid string) {
 	defer f.closedLocker.Unlock()
 	f.closed[sid] = f.closed[sid] + 1
 }
-
+func (f *FakeServer) getClosedVal(sid string) int {
+	f.closedLocker.Lock()
+	defer f.closedLocker.Unlock()
+	return f.closed[sid]
+}
 func TestConn(t *testing.T) {
 	Convey("Create conn", t, func() {
 		Convey("without transport", func() {
@@ -117,102 +122,6 @@ func TestConn(t *testing.T) {
 	})
 
 	Convey("Upgrade conn", t, func() {
-		Convey("polling to websocket", func() {
-			server := newFakeServer()
-			id := "id"
-			var conn *serverConn
-
-			h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if conn == nil {
-					var err error
-					conn, err = newServerConn(id, w, r, server)
-					if err != nil {
-						t.Fatal(err)
-					}
-				}
-
-				conn.ServeHTTP(w, r)
-			}))
-			defer h.Close()
-
-			u, err := url.Parse(h.URL)
-			So(err, ShouldBeNil)
-
-			req, err := http.NewRequest("GET", u.String()+"/?transport=polling", nil)
-			So(err, ShouldBeNil)
-			pc, err := polling.NewClient(req)
-			So(err, ShouldBeNil)
-
-			decoder, err := pc.NextReader()
-			So(err, ShouldBeNil)
-			So(pc.Response().StatusCode, ShouldEqual, http.StatusOK)
-
-			So(conn, ShouldNotBeNil)
-			So(conn, ShouldImplement, (*Conn)(nil))
-
-			So(decoder.MessageType(), ShouldEqual, message.MessageText)
-			So(decoder.Type(), ShouldEqual, parser.OPEN)
-
-			So(conn.getCurrent(), ShouldNotBeNil)
-			So(conn.getUpgrade(), ShouldBeNil)
-
-			u.Scheme = "ws"
-			req, err = http.NewRequest("GET", u.String()+"/?transport=websocket", nil)
-			So(err, ShouldBeNil)
-			wc, err := websocket.NewClient(req)
-			So(err, ShouldBeNil)
-
-			So(conn.getCurrent(), ShouldNotBeNil)
-			So(conn.getUpgrade(), ShouldNotBeNil)
-
-			encoder, err := wc.NextWriter(message.MessageBinary, parser.PING)
-			So(err, ShouldBeNil)
-			encoder.Write([]byte("probe"))
-			encoder.Close()
-
-			decoder, err = wc.NextReader()
-			So(err, ShouldBeNil)
-			So(wc.Response().StatusCode, ShouldEqual, http.StatusSwitchingProtocols)
-
-			So(decoder.MessageType(), ShouldEqual, message.MessageText)
-			So(decoder.Type(), ShouldEqual, parser.PONG)
-
-			pc.Close()
-
-			encoder, err = wc.NextWriter(message.MessageBinary, parser.UPGRADE)
-			So(err, ShouldBeNil)
-			encoder.Close()
-
-			decoder, err = wc.NextReader()
-			So(err, ShouldBeNil)
-			So(pc.Response().StatusCode, ShouldEqual, http.StatusOK)
-
-			So(decoder.MessageType(), ShouldEqual, message.MessageText)
-			So(decoder.Type(), ShouldEqual, parser.CLOSE)
-
-			So(conn.getCurrent(), ShouldNotBeNil)
-			So(conn.getUpgrade(), ShouldBeNil)
-
-			wc.Close()
-
-			conn.Close()
-
-			time.Sleep(time.Second)
-
-			server.closedLocker.Lock()
-			So(server.closed[id], ShouldEqual, 1)
-			server.closedLocker.Unlock()
-
-			err = conn.Close()
-			So(err, ShouldBeNil)
-
-			time.Sleep(time.Second)
-
-			server.closedLocker.Lock()
-			So(server.closed[id], ShouldEqual, 1)
-			server.closedLocker.Unlock()
-		})
-
 		Convey("close when upgrading", func() {
 			server := newFakeServer()
 			id := "id"
@@ -285,49 +194,6 @@ func TestConn(t *testing.T) {
 	})
 
 	Convey("Closing", t, func() {
-		Convey("close timeout by polling", func() {
-			server := newFakeServer()
-			id := "id"
-			var conn *serverConn
-
-			h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				if conn == nil {
-					var err error
-					conn, err = newServerConn(id, w, r, server)
-					if err != nil {
-						t.Fatal(err)
-					}
-				}
-
-				conn.ServeHTTP(w, r)
-			}))
-			defer h.Close()
-
-			u, err := url.Parse(h.URL)
-			So(err, ShouldBeNil)
-
-			req, err := http.NewRequest("GET", u.String()+"/?transport=polling", nil)
-			So(err, ShouldBeNil)
-			pc, err := polling.NewClient(req)
-			So(err, ShouldBeNil)
-
-			decoder, err := pc.NextReader()
-			So(err, ShouldBeNil)
-
-			So(decoder.MessageType(), ShouldEqual, message.MessageText)
-			So(decoder.Type(), ShouldEqual, parser.OPEN)
-
-			pc.Close()
-
-			time.Sleep(time.Second * 3)
-
-			server.closedLocker.Lock()
-			So(server.closed[id], ShouldEqual, 1)
-			server.closedLocker.Unlock()
-
-			err = conn.Close()
-			So(err, ShouldBeNil)
-		})
 
 		Convey("close by websocket", func() {
 			server := newFakeServer()
@@ -374,4 +240,105 @@ func TestConn(t *testing.T) {
 		})
 
 	})
+}
+
+func TestTimeoutByPolling(t *testing.T) {
+	assert := assert.New(t)
+	server := newFakeServer()
+	id := "id"
+	var conn *serverConn
+
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if conn == nil {
+			var err error
+			conn, err = newServerConn(id, w, r, server)
+			assert.Nil(err)
+		}
+		conn.ServeHTTP(w, r)
+	}))
+	defer h.Close()
+
+	u, err := url.Parse(h.URL)
+	assert.Nil(err)
+
+	req, err := http.NewRequest("GET", u.String()+"/?transport=polling", nil)
+	assert.Nil(err)
+
+	client, err := polling.NewClient(req)
+	assert.Nil(err)
+
+	decoder, err := client.NextReader()
+	assert.Nil(err)
+
+	assert.Equal(message.MessageText, decoder.MessageType())
+	assert.Equal(parser.OPEN, decoder.Type())
+
+	client.Close()
+
+	err = conn.Close()
+	assert.Nil(err)
+
+	assert.Equal(1, server.getClosedVal(id))
+}
+func TestPollingToWebsocket(t *testing.T) {
+	assert := assert.New(t)
+	server := newFakeServer()
+	id := "id"
+	var conn *serverConn
+
+	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if conn == nil {
+			var err error
+			conn, err = newServerConn(id, w, r, server)
+			assert.Nil(err)
+		}
+		conn.ServeHTTP(w, r)
+	}))
+	defer h.Close()
+
+	u, err := url.Parse(h.URL)
+	assert.Nil(err)
+	req, err := http.NewRequest("GET", u.String()+"/?transport=polling", nil)
+	assert.Nil(err)
+	pollingClient, err := polling.NewClient(req)
+	assert.Nil(err)
+
+	decoder, err := pollingClient.NextReader()
+	assert.Nil(err)
+	assert.Equal(http.StatusOK, pollingClient.Response().StatusCode)
+	assert.NotNil(conn)
+	assert.Equal(message.MessageText, decoder.MessageType())
+	assert.Equal(parser.OPEN, decoder.Type())
+	assert.NotNil(conn.getCurrent())
+	assert.Nil(conn.getUpgrade())
+
+	u.Scheme = "ws"
+	req, err = http.NewRequest("GET", u.String()+"/?transport=websocket", nil)
+	assert.Nil(err)
+	wc, err := websocket.NewClient(req)
+	assert.Nil(err)
+	assert.NotNil(conn.getCurrent())
+	assert.NotNil(conn.getUpgrade())
+
+	encoder, err := wc.NextWriter(message.MessageBinary, parser.PING)
+	assert.Nil(err)
+	encoder.Write([]byte("probe"))
+	encoder.Close()
+
+	decoder, err = wc.NextReader()
+	assert.Nil(err)
+	assert.Equal(http.StatusSwitchingProtocols, wc.Response().StatusCode)
+	assert.Equal(message.MessageText, decoder.MessageType())
+	assert.Equal(parser.PONG, decoder.Type())
+
+	pollingClient.Close()
+
+	encoder, err = wc.NextWriter(message.MessageBinary, parser.UPGRADE)
+	assert.Nil(err)
+	encoder.Close()
+
+	err = conn.Close()
+	assert.Nil(err)
+	assert.Equal(1, server.getClosedVal(id))
+	wc.Close()
 }

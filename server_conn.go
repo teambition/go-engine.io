@@ -38,6 +38,7 @@ type Conn interface {
 
 	// NextWriter returns the next message writer with given message type.
 	NextWriter(messageType MessageType) (io.WriteCloser, error)
+	LastPing() time.Time
 }
 
 type transportCreaters map[string]transport.Creater
@@ -77,8 +78,8 @@ type serverConn struct {
 	readerChan      chan *connReader
 	pingTimeout     time.Duration
 	pingInterval    time.Duration
-	pingChan        chan bool
 	pingLocker      sync.Mutex
+	lastPing        time.Time
 }
 
 var InvalidError = errors.New("invalid transport")
@@ -97,7 +98,6 @@ func newServerConn(id string, w http.ResponseWriter, r *http.Request, callback s
 		readerChan:   make(chan *connReader),
 		pingTimeout:  callback.configure().PingTimeout,
 		pingInterval: callback.configure().PingInterval,
-		pingChan:     make(chan bool),
 	}
 	transport, err := creater.Server(w, r, ret)
 	if err != nil {
@@ -107,8 +107,6 @@ func newServerConn(id string, w http.ResponseWriter, r *http.Request, callback s
 	if err := ret.onOpen(); err != nil {
 		return nil, err
 	}
-
-	go ret.pingLoop()
 
 	return ret, nil
 }
@@ -222,14 +220,9 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 			w.Close()
 		}
 		c.writerLocker.Unlock()
-		fallthrough
-	case parser.PONG:
 		c.pingLocker.Lock()
-		defer c.pingLocker.Unlock()
-		if s := c.getState(); s != stateNormal && s != stateUpgrading {
-			return
-		}
-		c.pingChan <- true
+		c.lastPing = time.Now()
+		c.pingLocker.Unlock()
 	case parser.MESSAGE:
 		closeChan := make(chan struct{})
 		c.readerChan <- newConnReader(r, closeChan)
@@ -259,9 +252,6 @@ func (c *serverConn) OnClose(server transport.Server) {
 	}
 	c.setState(stateClosed)
 	close(c.readerChan)
-	c.pingLocker.Lock()
-	close(c.pingChan)
-	c.pingLocker.Unlock()
 	c.callback.onClose(c.id)
 }
 
@@ -357,25 +347,8 @@ func (c *serverConn) setState(state state) {
 	c.state = state
 }
 
-func (c *serverConn) pingLoop() {
-	lastPing := time.Now()
-	lastTry := lastPing
-	for {
-		now := time.Now()
-		pingDiff := now.Sub(lastPing)
-		tryDiff := now.Sub(lastTry)
-		select {
-		case ok := <-c.pingChan:
-			if !ok {
-				return
-			}
-			lastPing = time.Now()
-			lastTry = lastPing
-		case <-time.After(c.pingInterval - tryDiff):
-			lastTry = time.Now()
-		case <-time.After(c.pingTimeout - pingDiff):
-			c.Close()
-			return
-		}
-	}
+func (c *serverConn) LastPing() time.Time {
+	c.pingLocker.Lock()
+	defer c.pingLocker.Unlock()
+	return c.lastPing
 }

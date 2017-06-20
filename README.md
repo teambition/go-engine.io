@@ -1,6 +1,8 @@
 # go-engine.io
 
-[![GoDoc](http://godoc.org/github.com/teambition/go-engine.io?status.svg)](http://godoc.org/github.com/teambition/go-engine.io) [![Build Status](https://travis-ci.org/teambition/go-engine.io.svg)](https://travis-ci.org/teambition/go-engine.io)
+[![Build Status](https://travis-ci.org/teambition/go-engine.io.svg)](https://travis-ci.org/teambition/go-engine.io)
+[![Coverage Status](http://img.shields.io/coveralls/teambition/go-engine.io.svg?style=flat-square)](https://coveralls.io/r/teambition/go-engine.io)
+[![GoDoc](http://godoc.org/github.com/teambition/go-engine.io?status.svg)](http://godoc.org/github.com/teambition/go-engine.io) 
 
 
 go-engine.io is the implement of engine.io in golang, which is transport-based cross-browser/cross-device bi-directional communication layer for [go-socket.io](https://github.com/teambition/go-socket.io).
