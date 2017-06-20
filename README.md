@@ -1,7 +1,7 @@
 # go-engine.io
 
 [![Build Status](https://travis-ci.org/teambition/go-engine.io.svg)](https://travis-ci.org/teambition/go-engine.io)
-[![Coverage Status](http://img.shields.io/coveralls/teambition/go-engine.io.svg?style=flat-square)](https://coveralls.io/r/teambition/go-engine.io)
+[![Coverage Status](https://coveralls.io/repos/github/teambition/go-engine.io/badge.svg?branch=2.0)](https://coveralls.io/github/teambition/go-engine.io?branch=2.0)
 [![GoDoc](http://godoc.org/github.com/teambition/go-engine.io?status.svg)](http://godoc.org/github.com/teambition/go-engine.io) 
 
 

@@ -255,10 +255,10 @@ func (c *serverConn) OnClose(server transport.Server) {
 	c.callback.onClose(c.id)
 }
 
-func (s *serverConn) onOpen() error {
+func (c *serverConn) onOpen() error {
 	upgrades := []string{}
-	for name := range s.callback.transports() {
-		if name == s.currentName {
+	for name := range c.callback.transports() {
+		if name == c.currentName {
 			continue
 		}
 		upgrades = append(upgrades, name)
@@ -270,12 +270,12 @@ func (s *serverConn) onOpen() error {
 		PingTimeout  time.Duration `json:"pingTimeout"`
 	}
 	resp := connectionInfo{
-		Sid:          s.Id(),
+		Sid:          c.Id(),
 		Upgrades:     upgrades,
-		PingInterval: s.callback.configure().PingInterval / time.Millisecond,
-		PingTimeout:  s.callback.configure().PingTimeout / time.Millisecond,
+		PingInterval: c.callback.configure().PingInterval / time.Millisecond,
+		PingTimeout:  c.callback.configure().PingTimeout / time.Millisecond,
 	}
-	w, err := s.getCurrent().NextWriter(message.MessageText, parser.OPEN)
+	w, err := c.getCurrent().NextWriter(message.MessageText, parser.OPEN)
 	if err != nil {
 		return err
 	}

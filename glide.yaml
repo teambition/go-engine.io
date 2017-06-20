@@ -1,0 +1,13 @@
+package: github.com/teambition/go-engine.io
+import:
+- package: github.com/gorilla/websocket
+  version: ^1.1.0
+testImport:
+- package: github.com/smartystreets/goconvey
+  version: ^1.6.2
+  subpackages:
+  - convey
+- package: github.com/stretchr/testify
+  version: ^1.1.4
+  subpackages:
+  - assert

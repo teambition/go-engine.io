@@ -1,7 +1,15 @@
 language: go
 go: 1.8
-install:
+before_install:
+  - go get -t -v ./...
   - go get "github.com/smartystreets/goconvey/convey"
-  - go get -v .
+  - go get "github.com/stretchr/testify/assert"
+  - go get github.com/modocache/gover
+  - go get github.com/mattn/goveralls
 script:
-  - go test -race -v ./...
+  - go test -coverprofile="engineio.coverprofile" ./engineio
+  - go test -coverprofile="parser.coverprofile" ./parser
+  - go test -coverprofile="polling.coverprofile" ./polling
+  - go test -coverprofile="websocket.coverprofile" ./websocket
+  - gover
+  - goveralls -coverprofile=gover.coverprofile -service=travis-ci

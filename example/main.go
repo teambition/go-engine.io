@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/teambition/go-engine.io"
+	"github.com/teambition/go-engine.io/engineio"
 )
 
 func main() {
