@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<script src="engine.io.js"></script>
+<script
+  src="https://code.jquery.com/jquery-2.2.4.min.js"
+  integrity="sha256-BbhdlvQf/xTY9gja0Dq3HiwQF8LaCRTXxZKRutelT44="
+  crossorigin="anonymous"></script>
+
+<body>
+<p></p>
+</body>
+</html>
+
+<script>
+
+    // http://127.0.0.1:4000/debug/pprof
+    
+    var socket = eio('http://127.0.0.1:4000',{
+        path: '/engine.io',
+    });
+  
+    socket.on('open', function(){
+        $("p").append("open")
+        setInterval("Communication()",1000);
+    });
+    socket.on('error', function(err){
+        $("p").append("<br/>error:" + err);
+    });
+    socket.on('message', function(data){
+	    $("p").append("<br/>" + data);
+    });
+    socket.on('close', function(err){
+        $("p").append("<br/>close");
+    });
+    var x=1
+    function Communication()
+    {
+        var data = 'hello world ' + x++;
+        socket.send(data);
+        $("p").append("<br/>Client send:"+ data);
+    }
+</script>

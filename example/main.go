@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"time"
 
+	_ "net/http/pprof"
+
 	"github.com/teambition/go-engine.io/engineio"
 )
 
@@ -28,7 +30,7 @@ func main() {
 					log.Println("disconnected:", conn.Id())
 				}()
 				for {
-					t, r, err := conn.NextReader()
+					messageType, r, err := conn.NextReader()
 					if err != nil {
 						return
 					}
@@ -37,16 +39,17 @@ func main() {
 						return
 					}
 					r.Close()
-					if t == engineio.MessageText {
-						log.Println(t, string(b))
+					if messageType == engineio.MessageText {
+						log.Println(messageType, string(b))
 					} else {
-						log.Println(t, hex.EncodeToString(b))
+						log.Println(messageType, hex.EncodeToString(b))
 					}
-					w, err := conn.NextWriter(t)
+					w, err := conn.NextWriter(messageType)
 					if err != nil {
 						return
 					}
-					w.Write([]byte("pong"))
+					w.Write([]byte("server reply:"))
+					w.Write(b)
 					w.Close()
 				}
 			}()
@@ -54,7 +57,7 @@ func main() {
 	}()
 
 	http.Handle("/engine.io/", server)
-	http.Handle("/", http.FileServer(http.Dir("./asset")))
+	http.Handle("/", http.FileServer(http.Dir("./web")))
 	log.Println("Serving at localhost:4000...")
 	log.Fatal(http.ListenAndServe(":4000", nil))
 }
