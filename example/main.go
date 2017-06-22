@@ -48,7 +48,6 @@ func main() {
 					if err != nil {
 						return
 					}
-					w.Write([]byte("server reply:"))
 					w.Write(b)
 					w.Close()
 				}
