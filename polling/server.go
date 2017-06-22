@@ -31,15 +31,12 @@ type Polling struct {
 	stateLocker sync.Mutex
 }
 
+// NewServer Create a polling server
 func NewServer(w http.ResponseWriter, r *http.Request, callback transport.Callback) (transport.Server, error) {
-	newEncoder := parser.NewBinaryPayloadEncoder
-	if r.URL.Query()["b64"] != nil {
-		newEncoder = parser.NewStringPayloadEncoder
-	}
 	ret := &Polling{
 		sendChan:   MakeSendChan(),
-		encoder:    newEncoder(),
 		callback:   callback,
+		encoder:    parser.NewPayloadEncoder(r.URL.Query()["b64"] != nil),
 		getLocker:  NewLocker(),
 		postLocker: NewLocker(),
 		state:      stateNormal,

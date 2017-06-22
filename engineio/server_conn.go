@@ -15,11 +15,29 @@ import (
 )
 
 type MessageType message.MessageType
+type state int
 
 const (
 	MessageBinary MessageType = MessageType(message.MessageBinary)
 	MessageText   MessageType = MessageType(message.MessageText)
+	stateUnknow   state       = iota
+	stateNormal
+	stateUpgrading
+	stateClosing
+	stateClosed
 )
+
+type transportCreaters map[string]transport.Creater
+
+func (c transportCreaters) Get(name string) transport.Creater {
+	return c[name]
+}
+
+type serverCallback interface {
+	configure() config
+	transports() transportCreaters
+	onClose(sid string)
+}
 
 // Conn is the connection object of engine.io.
 type Conn interface {
@@ -39,47 +57,6 @@ type Conn interface {
 	// NextWriter returns the next message writer with given message type.
 	NextWriter(messageType MessageType) (io.WriteCloser, error)
 	LastPing() time.Time
-}
-
-type transportCreaters map[string]transport.Creater
-
-func (c transportCreaters) Get(name string) transport.Creater {
-	return c[name]
-}
-
-type serverCallback interface {
-	configure() config
-	transports() transportCreaters
-	onClose(sid string)
-}
-
-type state int
-
-const (
-	stateUnknow state = iota
-	stateNormal
-	stateUpgrading
-	stateClosing
-	stateClosed
-)
-
-type serverConn struct {
-	id              string
-	request         *http.Request
-	callback        serverCallback
-	writerLocker    sync.Mutex
-	transportLocker sync.RWMutex
-	currentName     string
-	current         transport.Server
-	upgradingName   string
-	upgrading       transport.Server
-	state           state
-	stateLocker     sync.RWMutex
-	readerChan      chan *connReader
-	pingTimeout     time.Duration
-	pingInterval    time.Duration
-	pingLocker      sync.Mutex
-	lastPing        time.Time
 }
 
 var InvalidError = errors.New("invalid transport")
@@ -109,6 +86,25 @@ func newServerConn(id string, w http.ResponseWriter, r *http.Request, callback s
 	}
 
 	return ret, nil
+}
+
+type serverConn struct {
+	id              string
+	request         *http.Request
+	callback        serverCallback
+	writerLocker    sync.Mutex
+	transportLocker sync.RWMutex
+	currentName     string
+	current         transport.Server
+	upgradingName   string
+	upgrading       transport.Server
+	state           state
+	stateLocker     sync.RWMutex
+	readerChan      chan *connReader
+	pingTimeout     time.Duration
+	pingInterval    time.Duration
+	pingLocker      sync.Mutex
+	lastPing        time.Time
 }
 
 func (c *serverConn) Id() string {

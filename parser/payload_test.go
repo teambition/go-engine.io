@@ -29,7 +29,7 @@ func TestStringPayload(t *testing.T) {
 		Convey("Given an array of packet "+test.name, t, func() {
 
 			Convey("Create encoder", func() {
-				encoder := NewStringPayloadEncoder()
+				encoder := NewPayloadEncoder(true)
 				So(encoder.IsString(), ShouldBeTrue)
 
 				Convey("Encoded", func() {
@@ -110,7 +110,7 @@ func TestBinaryPayload(t *testing.T) {
 		Convey("Given an array of packet "+test.name, t, func() {
 
 			Convey("Create encoder", func() {
-				encoder := NewBinaryPayloadEncoder()
+				encoder := NewPayloadEncoder(false)
 				So(encoder.IsString(), ShouldBeFalse)
 
 				Convey("Encoded", func() {
@@ -180,7 +180,7 @@ func TestParallelEncode(t *testing.T) {
 		max := 1000
 		buf1 := bytes.NewBuffer(nil)
 		buf2 := bytes.NewBuffer(nil)
-		encoder := NewStringPayloadEncoder()
+		encoder := NewPayloadEncoder(true)
 		for i := 0; i < max; i++ {
 			go func() {
 				e, _ := encoder.NextString(MESSAGE)

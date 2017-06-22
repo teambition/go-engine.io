@@ -5,8 +5,7 @@
 [![GoDoc](http://godoc.org/github.com/teambition/go-engine.io?status.svg)](http://godoc.org/github.com/teambition/go-engine.io) 
 
 
-go-engine.io is the implement of engine.io in golang, which is transport-based cross-browser/cross-device bi-directional communication layer for [go-socket.io](https://github.com/teambition/go-socket.io).
-
+go-engine.io is the implement of engine.io in golang.
 It is compatible with node.js implement, and supported long-polling and websocket transport.
 
 ## Install
@@ -70,7 +69,7 @@ func main() {
 	}()
 
 	http.Handle("/engine.io/", server)
-	http.Handle("/", http.FileServer(http.Dir("./asset")))
+	http.Handle("/", http.FileServer(http.Dir("./web")))
 	log.Println("Serving at localhost:5000...")
 	log.Fatal(http.ListenAndServe(":5000", nil))
 }

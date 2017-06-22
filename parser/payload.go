@@ -9,25 +9,18 @@ import (
 	"sync"
 )
 
-// payloadEncoder is the encoder to encode packets as payload. It can be used in multi-thread.
+// NewPayloadEncoder returns the encoder which encode as string or binary.
+func NewPayloadEncoder(isString bool) *PayloadEncoder {
+	return &PayloadEncoder{
+		isString: isString,
+	}
+}
+
+// PayloadEncoder is the encoder to encode packets as payload. It can be used in multi-thread.
 type PayloadEncoder struct {
 	buffers  [][]byte
 	locker   sync.Mutex
 	isString bool
-}
-
-// NewStringPayloadEncoder returns the encoder which encode as string.
-func NewStringPayloadEncoder() *PayloadEncoder {
-	return &PayloadEncoder{
-		isString: true,
-	}
-}
-
-// NewStringPayloadEncoder returns the encoder which encode as binary.
-func NewBinaryPayloadEncoder() *PayloadEncoder {
-	return &PayloadEncoder{
-		isString: false,
-	}
 }
 
 type encoder struct {

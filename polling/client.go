@@ -3,13 +3,13 @@ package polling
 import (
 	"bytes"
 	"fmt"
-	"github.com/teambition/go-engine.io/message"
 	"io"
 	"io/ioutil"
 	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
 	"github.com/teambition/go-engine.io/transport"
 )
@@ -28,15 +28,11 @@ type client struct {
 }
 
 func NewClient(r *http.Request) (transport.Client, error) {
-	newEncoder := parser.NewBinaryPayloadEncoder
-	if _, ok := r.URL.Query()["b64"]; ok {
-		newEncoder = parser.NewStringPayloadEncoder
-	}
 	ret := &client{
 		req:            *r,
 		url:            *r.URL,
 		seq:            0,
-		payloadEncoder: newEncoder(),
+		payloadEncoder: parser.NewPayloadEncoder(r.URL.Query()["b64"] != nil),
 		client:         http.DefaultClient,
 		state:          stateNormal,
 	}
