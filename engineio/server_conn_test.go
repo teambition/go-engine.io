@@ -14,6 +14,7 @@ import (
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
 	"github.com/teambition/go-engine.io/polling"
+	"github.com/teambition/go-engine.io/transport"
 	"github.com/teambition/go-engine.io/websocket"
 )
 
@@ -32,8 +33,14 @@ func newFakeServer() *FakeServer {
 			AllowUpgrades: true,
 		},
 		creaters: transportCreaters{
-			"polling":   polling.Creater,
-			"websocket": websocket.Creater,
+			"polling": transport.Creater{
+				Name:   "polling",
+				Server: polling.NewServer,
+			},
+			"websocket": transport.Creater{
+				Name:   "websocket",
+				Server: websocket.NewServer,
+			},
 		},
 		closed: make(map[string]int),
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/teambition/go-engine.io/polling"
+	"github.com/teambition/go-engine.io/transport"
 	"github.com/teambition/go-engine.io/websocket"
 )
 
@@ -38,9 +39,15 @@ func NewServer(transports []string) (*Server, error) {
 	for _, t := range transports {
 		switch t {
 		case "polling":
-			creaters[t] = polling.Creater
+			creaters[t] = transport.Creater{
+				Name:   "polling",
+				Server: polling.NewServer,
+			}
 		case "websocket":
-			creaters[t] = websocket.Creater
+			creaters[t] = transport.Creater{
+				Name:   "websocket",
+				Server: websocket.NewServer,
+			}
 		default:
 			return nil, InvalidError
 		}

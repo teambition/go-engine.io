@@ -46,6 +46,7 @@ func TestCreateServer(t *testing.T) {
 	assert.Nil(err)
 
 	id1 := newId(req)
+	time.Sleep(time.Millisecond)
 	id2 := newId(req)
 	assert.NotEqual(id1, id2)
 
@@ -197,6 +198,54 @@ func TestPing(t *testing.T) {
 	client.SendPacket(&transports.Packet{Type: transports.Ping})
 	sync <- 1
 	<-sync
+
+}
+func TestUpgrades(t *testing.T) {
+	assert := assert.New(t)
+	sync := make(chan int)
+	var wsurl, sid string
+
+	go func() {
+		websocket, _ := NewServer(nil)
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			websocket.ServeHTTP(w, r)
+		}))
+		wsurl = server.URL
+		sync <- 1
+		conn, err := websocket.Accept()
+		assert.Nil(err)
+		sid = conn.Id()
+		<-sync
+	}()
+	<-sync
+
+	pollingClient := &http.Client{}
+	res, err := pollingClient.Do(newOpenReq(wsurl))
+
+	assert.Nil(err)
+	assert.Equal(200, res.StatusCode)
+	bodyBytes, err := ioutil.ReadAll(res.Body)
+	assert.Contains(string(bodyBytes), `"upgrades":["websocket"],"pingInterval":25000,"pingTimeout":60000}`)
+
+	go func() {
+		time.Sleep(10 * time.Millisecond)
+		client, err := wsclient.NewClient(getURL(wsurl) + "?transport=websocket&sid=" + sid)
+		if assert.Nil(err) {
+			client.SendPacket(&transports.Packet{Type: transports.Ping, Data: []byte("probe")})
+		}
+		event := <-client.Event
+		assert.Equal("pong", event.Type)
+		assert.Equal("probe", string(event.Data))
+
+		client.SendPacket(&transports.Packet{Type: transports.Upgrade})
+		time.Sleep(20 * time.Millisecond)
+	}()
+	res, err = pollingClient.Do(newOpenReq(wsurl + "?sid=" + sid))
+	assert.Nil(err)
+	assert.Equal(200, res.StatusCode)
+	bodyBytes, err = ioutil.ReadAll(res.Body)
+	assert.Contains(string(bodyBytes), "6")
+	time.Sleep(20 * time.Millisecond)
 
 }
 func getURL(addr string) string {
