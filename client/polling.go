@@ -1,4 +1,4 @@
-package polling
+package client
 
 import (
 	"bytes"
@@ -11,10 +11,18 @@ import (
 
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
-	"github.com/teambition/go-engine.io/transport"
 )
 
-type client struct {
+type state int
+
+const (
+	stateUnknow state = iota
+	stateNormal
+	stateClosing
+	stateClosed
+)
+
+type Polling struct {
 	req            http.Request
 	url            url.URL
 	seq            uint
@@ -27,8 +35,8 @@ type client struct {
 	state          state
 }
 
-func NewClient(r *http.Request) (transport.Client, error) {
-	ret := &client{
+func NewPolling(r *http.Request) (Client, error) {
+	ret := &Polling{
 		req:            *r,
 		url:            *r.URL,
 		seq:            0,
@@ -39,11 +47,11 @@ func NewClient(r *http.Request) (transport.Client, error) {
 	return ret, nil
 }
 
-func (c *client) Response() *http.Response {
+func (c *Polling) Response() *http.Response {
 	return c.resp
 }
 
-func (c *client) NextReader() (*parser.PacketDecoder, error) {
+func (c *Polling) NextReader() (*parser.PacketDecoder, error) {
 	if c.state != stateNormal {
 		return nil, io.EOF
 	}
@@ -69,7 +77,7 @@ func (c *client) NextReader() (*parser.PacketDecoder, error) {
 	return c.payloadDecoder.Next()
 }
 
-func (c *client) NextWriter(messageType message.MessageType, packetType parser.PacketType) (io.WriteCloser, error) {
+func (c *Polling) NextWriter(messageType message.MessageType, packetType parser.PacketType) (io.WriteCloser, error) {
 	if c.state != stateNormal {
 		return nil, io.EOF
 	}
@@ -84,7 +92,7 @@ func (c *client) NextWriter(messageType message.MessageType, packetType parser.P
 	return newClientWriter(c, w), nil
 }
 
-func (c *client) Close() error {
+func (c *Polling) Close() error {
 	if c.state != stateNormal {
 		return nil
 	}
@@ -92,7 +100,7 @@ func (c *client) Close() error {
 	return nil
 }
 
-func (c *client) getReq() *http.Request {
+func (c *Polling) getReq() *http.Request {
 	req := c.req
 	url := c.url
 	req.URL = &url
@@ -103,7 +111,7 @@ func (c *client) getReq() *http.Request {
 	return &req
 }
 
-func (c *client) doPost() error {
+func (c *Polling) doPost() error {
 	if c.state != stateNormal {
 		return io.EOF
 	}
@@ -127,10 +135,10 @@ func (c *client) doPost() error {
 
 type clientWriter struct {
 	io.WriteCloser
-	client *client
+	client *Polling
 }
 
-func newClientWriter(c *client, w io.WriteCloser) io.WriteCloser {
+func newClientWriter(c *Polling, w io.WriteCloser) io.WriteCloser {
 	return &clientWriter{
 		WriteCloser: w,
 		client:      c,

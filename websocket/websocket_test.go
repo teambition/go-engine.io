@@ -12,6 +12,7 @@ import (
 
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/assert"
+	"github.com/teambition/go-engine.io/client"
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
 	"github.com/teambition/go-engine.io/transport"
@@ -74,7 +75,7 @@ func TestServerPart(t *testing.T) {
 	u.Scheme = "ws"
 	req, err := http.NewRequest("GET", u.String(), nil)
 	assert.Nil(err)
-	c, _ := NewClient(req)
+	c, _ := client.NewWebsocket(req)
 	defer c.Close()
 	{
 		w, _ := c.NextWriter(message.MessageBinary, parser.MESSAGE)
@@ -161,7 +162,7 @@ func TestClientPart(t *testing.T) {
 	req, err := http.NewRequest("GET", u.String()+"/?key=value", nil)
 	assert.Nil(err)
 
-	c, err := NewClient(req)
+	c, err := client.NewWebsocket(req)
 	assert.Nil(err)
 	defer c.Close()
 
@@ -245,13 +246,13 @@ func TestPacketContent(t *testing.T) {
 	req, err := http.NewRequest("GET", u.String(), nil)
 	assert.Nil(err)
 
-	c, err := NewClient(req)
+	c, err := client.NewWebsocket(req)
 	assert.Nil(err)
 	defer c.Close()
 
 	{
-		client := c.(*client)
-		t, r, err := client.conn.NextReader()
+		client := c.(*client.Websocket)
+		t, r, err := client.Conn.NextReader()
 		assert.Nil(err)
 		assert.Equal(websocket.TextMessage, t)
 		b, err := ioutil.ReadAll(r)
@@ -283,7 +284,7 @@ func TestClose(t *testing.T) {
 	req, err := http.NewRequest("GET", u.String(), nil)
 	assert.Nil(err)
 
-	c, err := NewClient(req)
+	c, err := client.NewWebsocket(req)
 	assert.Nil(err)
 	defer c.Close()
 
@@ -311,7 +312,7 @@ func TestClosingByDisconnected(t *testing.T) {
 	req, err := http.NewRequest("GET", u.String(), nil)
 	assert.Nil(err)
 
-	c, err := NewClient(req)
+	c, err := client.NewWebsocket(req)
 	assert.Nil(err)
 	defer c.Close()
 
@@ -347,7 +348,7 @@ func TestClosingWriterAfterClosed(t *testing.T) {
 	u.Scheme = "ws"
 	req, _ := http.NewRequest("GET", u.String(), nil)
 
-	c, _ := NewClient(req)
+	c, _ := client.NewWebsocket(req)
 	defer c.Close()
 
 	<-sync

@@ -10,6 +10,7 @@ import (
 
 	. "github.com/smartystreets/goconvey/convey"
 	"github.com/stretchr/testify/assert"
+	"github.com/teambition/go-engine.io/client"
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
 	"github.com/teambition/go-engine.io/polling"
@@ -113,7 +114,7 @@ func TestConn(t *testing.T) {
 				So(err, ShouldBeNil)
 				So(req, ShouldNotBeNil)
 
-				c, err := websocket.NewClient(req)
+				c, err := client.NewWebsocket(req)
 				So(err, ShouldBeNil)
 				defer c.Close()
 			})
@@ -145,7 +146,7 @@ func TestConn(t *testing.T) {
 
 			req, err := http.NewRequest("GET", u.String()+"/?transport=polling", nil)
 			So(err, ShouldBeNil)
-			pc, err := polling.NewClient(req)
+			pc, err := client.NewPolling(req)
 			So(err, ShouldBeNil)
 
 			decoder, err := pc.NextReader()
@@ -164,7 +165,7 @@ func TestConn(t *testing.T) {
 			u.Scheme = "ws"
 			req, err = http.NewRequest("GET", u.String()+"/?transport=websocket", nil)
 			So(err, ShouldBeNil)
-			wc, err := websocket.NewClient(req)
+			wc, err := client.NewWebsocket(req)
 			So(err, ShouldBeNil)
 
 			So(conn.getCurrent(), ShouldNotBeNil)
@@ -222,7 +223,7 @@ func TestConn(t *testing.T) {
 			u.Scheme = "ws"
 			req, err := http.NewRequest("GET", u.String()+"/?transport=websocket", nil)
 			So(err, ShouldBeNil)
-			wc, err := websocket.NewClient(req)
+			wc, err := client.NewWebsocket(req)
 			So(err, ShouldBeNil)
 
 			wc.Close()
@@ -264,7 +265,7 @@ func TestTimeoutByPolling(t *testing.T) {
 	req, err := http.NewRequest("GET", u.String()+"/?transport=polling", nil)
 	assert.Nil(err)
 
-	client, err := polling.NewClient(req)
+	client, err := client.NewPolling(req)
 	assert.Nil(err)
 
 	decoder, err := client.NextReader()
@@ -300,7 +301,7 @@ func TestPollingToWebsocket(t *testing.T) {
 	assert.Nil(err)
 	req, err := http.NewRequest("GET", u.String()+"/?transport=polling", nil)
 	assert.Nil(err)
-	pollingClient, err := polling.NewClient(req)
+	pollingClient, err := client.NewPolling(req)
 	assert.Nil(err)
 
 	decoder, err := pollingClient.NextReader()
@@ -315,7 +316,7 @@ func TestPollingToWebsocket(t *testing.T) {
 	u.Scheme = "ws"
 	req, err = http.NewRequest("GET", u.String()+"/?transport=websocket", nil)
 	assert.Nil(err)
-	wc, err := websocket.NewClient(req)
+	wc, err := client.NewWebsocket(req)
 	assert.Nil(err)
 	assert.NotNil(conn.getCurrent())
 	assert.NotNil(conn.getUpgrade())

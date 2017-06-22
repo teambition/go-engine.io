@@ -6,10 +6,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	. "github.com/smartystreets/goconvey/convey"
+	"github.com/teambition/go-engine.io/client"
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
 	"github.com/teambition/go-engine.io/transport"
-	. "github.com/smartystreets/goconvey/convey"
 )
 
 func TestPolling(t *testing.T) {
@@ -21,7 +22,7 @@ func TestPolling(t *testing.T) {
 
 		req, err := http.NewRequest("GET", server.URL, nil)
 		So(err, ShouldBeNil)
-		client, err := NewClient(req)
+		client, err := client.NewPolling(req)
 		So(err, ShouldBeNil)
 
 		So(client.Response(), ShouldBeNil)
@@ -116,7 +117,7 @@ func TestPolling(t *testing.T) {
 
 		req, err := http.NewRequest("GET", server.URL+"?b64", nil)
 		So(err, ShouldBeNil)
-		client, err := NewClient(req)
+		client, err := client.NewPolling(req)
 		So(err, ShouldBeNil)
 
 		So(client.Response(), ShouldBeNil)
