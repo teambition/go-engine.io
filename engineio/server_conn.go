@@ -129,7 +129,7 @@ func (c *serverConn) NextReader() (MessageType, io.ReadCloser, error) {
 func (c *serverConn) NextWriter(t MessageType) (io.WriteCloser, error) {
 	switch c.getState() {
 	case stateUpgrading:
-		for i := 0; i < 30; i++ {
+		for i := 0; i < 60; i++ {
 			time.Sleep(50 * time.Millisecond)
 			if c.getState() != stateUpgrading {
 				break
