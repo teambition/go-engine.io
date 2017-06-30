@@ -206,14 +206,17 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 		u := c.getUpgrade()
 		newWriter := t.NextWriter
 		if u != nil {
-			if w, _ := t.NextWriter(message.MessageText, parser.NOOP); w != nil {
-				w.Close()
-			}
 			newWriter = u.NextWriter
 		}
 		if w, _ := newWriter(message.MessageText, parser.PONG); w != nil {
 			io.Copy(w, r)
 			w.Close()
+		}
+		if u != nil {
+			time.Sleep(50 * time.Millisecond)
+			if w, _ := t.NextWriter(message.MessageText, parser.NOOP); w != nil {
+				w.Close()
+			}
 		}
 		c.writerLocker.Unlock()
 		c.pingLocker.Lock()

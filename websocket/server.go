@@ -4,10 +4,10 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/gorilla/websocket"
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
 	"github.com/teambition/go-engine.io/transport"
-	"github.com/gorilla/websocket"
 )
 
 type Server struct {
@@ -16,7 +16,7 @@ type Server struct {
 }
 
 func NewServer(w http.ResponseWriter, r *http.Request, callback transport.Callback) (transport.Server, error) {
-	conn, err := websocket.Upgrade(w, r, nil, 10240, 10240)
+	conn, err := websocket.Upgrade(w, r, w.Header(), 10240, 10240)
 	if err != nil {
 		return nil, err
 	}
