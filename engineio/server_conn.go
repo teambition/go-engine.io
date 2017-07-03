@@ -212,13 +212,10 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 			io.Copy(w, r)
 			w.Close()
 		}
-		if u != nil {
-			time.Sleep(50 * time.Millisecond)
-			if w, _ := t.NextWriter(message.MessageText, parser.NOOP); w != nil {
-				w.Close()
-			}
-		}
 		c.writerLocker.Unlock()
+		if u != nil {
+			go c.noopLoop()
+		}
 		c.pingLocker.Lock()
 		c.lastPing = time.Now()
 		c.pingLocker.Unlock()
@@ -233,7 +230,27 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	case parser.NOOP:
 	}
 }
-
+func (c *serverConn) noopLoop() {
+	i := 0
+	for c.getUpgrade() != nil && i <= 300 {
+		c.writerLocker.Lock()
+		t := c.getCurrent()
+		var err error
+		var w io.WriteCloser
+		if c.getUpgrade() != nil {
+			w, err = t.NextWriter(message.MessageText, parser.NOOP)
+			if w != nil {
+				w.Close()
+			}
+		}
+		c.writerLocker.Unlock()
+		if err != nil {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+		i++
+	}
+}
 func (c *serverConn) OnClose(server transport.Server) {
 	if t := c.getUpgrade(); server == t {
 		c.setUpgrading("", nil)
