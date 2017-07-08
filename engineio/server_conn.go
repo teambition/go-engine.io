@@ -204,6 +204,18 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 		c.writerLocker.Lock()
 		t := c.getCurrent()
 		u := c.getUpgrade()
+		if t == nil {
+			for i := 0; i < 10; i++ {
+				time.Sleep(50 * time.Millisecond)
+				t = c.getCurrent()
+				if t != nil {
+					break
+				}
+			}
+			if t == nil {
+				return
+			}
+		}
 		newWriter := t.NextWriter
 		if u != nil {
 			newWriter = u.NextWriter
