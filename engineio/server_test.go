@@ -86,8 +86,6 @@ func TestWebsocket(t *testing.T) {
 			assert.Equal(testData1, b)
 			write(conn, testData1Reply)
 		}
-		a1 := conn.LastPing().Equal(time.Time{})
-		assert.True(a1)
 		b, err := read(conn)
 		assert.Nil(b)
 		assert.Equal(io.EOF, err)

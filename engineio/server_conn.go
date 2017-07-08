@@ -75,6 +75,7 @@ func newServerConn(id string, w http.ResponseWriter, r *http.Request, callback s
 		readerChan:   make(chan *connReader),
 		pingTimeout:  callback.configure().PingTimeout,
 		pingInterval: callback.configure().PingInterval,
+		lastPing:     time.Now(),
 	}
 	transport, err := creater.Server(w, r, ret)
 	if err != nil {
@@ -159,15 +160,17 @@ func (c *serverConn) Close() error {
 	if c.upgrading != nil {
 		c.upgrading.Close()
 	}
-	c.writerLocker.Lock()
-	if w, err := c.getCurrent().NextWriter(message.MessageText, parser.CLOSE); err == nil {
-		writer := newConnWriter(w, &c.writerLocker)
-		writer.Close()
-	} else {
-		c.writerLocker.Unlock()
-	}
-	if err := c.getCurrent().Close(); err != nil {
-		return err
+	if c.getCurrent() != nil {
+		c.writerLocker.Lock()
+		if w, err := c.getCurrent().NextWriter(message.MessageText, parser.CLOSE); err == nil {
+			writer := newConnWriter(w, &c.writerLocker)
+			writer.Close()
+		} else {
+			c.writerLocker.Unlock()
+		}
+		if err := c.getCurrent().Close(); err != nil {
+			return err
+		}
 	}
 	c.setState(stateClosing)
 	return nil
