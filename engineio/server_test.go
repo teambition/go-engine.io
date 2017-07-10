@@ -190,6 +190,7 @@ func TestPing(t *testing.T) {
 	assert.Equal("open", event.Type)
 	assert.Contains(string(event.Data), `"upgrades":["polling"],"pingInterval":25000,"pingTimeout":60000}`)
 
+	time.Sleep(20 * time.Millisecond)
 	client.SendPacket(&transports.Packet{Type: transports.Ping})
 	sync <- 1
 	time.Sleep(20 * time.Millisecond)
