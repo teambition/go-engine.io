@@ -16,8 +16,7 @@ import (
 type state int
 
 const (
-	stateUnknow state = iota
-	stateNormal
+	stateNormal state = iota
 	stateClosing
 	stateClosed
 )

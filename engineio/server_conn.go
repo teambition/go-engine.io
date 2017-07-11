@@ -21,8 +21,8 @@ type state int
 const (
 	MessageBinary MessageType = MessageType(message.MessageBinary)
 	MessageText   MessageType = MessageType(message.MessageText)
-	stateUnknow   state       = iota
-	stateNormal
+
+	stateNormal state = iota
 	stateUpgrading
 	stateClosing
 	stateClosed
@@ -155,9 +155,14 @@ func (c *serverConn) NextWriter(t MessageType) (io.WriteCloser, error) {
 }
 
 func (c *serverConn) Close() error {
-	if c.getState() != stateNormal && c.getState() != stateUpgrading {
+	c.stateLocker.Lock()
+	if c.state != stateNormal && c.state != stateUpgrading {
+		c.stateLocker.Unlock()
 		return nil
 	}
+	c.state = stateClosing
+	c.stateLocker.Unlock()
+
 	if c.upgrading != nil {
 		c.upgrading.Close()
 	}
@@ -173,7 +178,6 @@ func (c *serverConn) Close() error {
 			return err
 		}
 	}
-	c.setState(stateClosing)
 	return nil
 }
 
@@ -287,8 +291,13 @@ func (c *serverConn) OnClose(server transport.Server) {
 		t.Close()
 		c.setUpgrading("", nil)
 	}
-	c.setState(stateClosed)
-	close(c.readerChan)
+
+	c.stateLocker.Lock()
+	if c.state != stateClosed {
+		c.state = stateClosed
+		close(c.readerChan)
+	}
+	c.stateLocker.Unlock()
 	c.callback.onClose(c.id)
 }
 
@@ -366,10 +375,10 @@ func (c *serverConn) upgraded() {
 	c.upgrading = nil
 	c.upgradingName = ""
 
+	c.setState(stateNormal)
 	c.transportLocker.Unlock()
 
 	current.Close()
-	c.setState(stateNormal)
 }
 
 func (c *serverConn) getState() state {

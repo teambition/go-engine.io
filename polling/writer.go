@@ -20,14 +20,23 @@ func NewWriter(w io.WriteCloser, server *Polling) *Writer {
 		server:      server,
 	}
 }
-
-func (w *Writer) Close() error {
-	if w.server.getState() != stateNormal {
-		return errors.New("use of closed network connection")
+func (w *Writer) notify() (err error) {
+	w.server.stateLocker.Lock()
+	defer w.server.stateLocker.Unlock()
+	if w.server.state != stateNormal {
+		return errors.New("Error: use of closed network connection")
 	}
 	select {
 	case w.server.sendChan <- true:
 	default:
+	}
+	return
+}
+
+func (w *Writer) Close() (err error) {
+	err = w.notify()
+	if err != nil {
+		return
 	}
 	return w.WriteCloser.Close()
 }

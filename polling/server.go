@@ -15,8 +15,7 @@ import (
 type state int
 
 const (
-	stateUnknow state = iota
-	stateNormal
+	stateNormal state = iota
 	stateClosing
 	stateClosed
 )
@@ -54,11 +53,15 @@ func (p *Polling) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *Polling) Close() error {
-	if p.getState() != stateNormal {
+	p.stateLocker.Lock()
+	if p.state != stateNormal {
+		p.stateLocker.Unlock()
 		return nil
 	}
+	p.state = stateClosing
 	close(p.sendChan)
-	p.setState(stateClosing)
+	p.stateLocker.Unlock()
+
 	if p.getLocker.TryLock() {
 		if p.postLocker.TryLock() {
 			p.callback.OnClose(p)

@@ -1,25 +1,26 @@
 package engineio
 
 import (
-	. "github.com/smartystreets/goconvey/convey"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestServerSessions(t *testing.T) {
-	Convey("Server sessions", t, func() {
-		sessions := newServerSessions()
+	assert := assert.New(t)
+	sessions := newServerSessions()
 
-		So(sessions.Get("a"), ShouldBeNil)
+	assert.Nil(sessions.Get("a"))
 
-		sessions.Set("b", new(serverConn))
-		So(sessions.Get("b"), ShouldNotBeNil)
+	sessions.Set("b", new(serverConn))
+	assert.NotNil(sessions.Get("b"))
 
-		So(sessions.Get("a"), ShouldBeNil)
+	assert.Nil(sessions.Get("a"))
 
-		sessions.Set("c", new(serverConn))
-		So(sessions.Get("c"), ShouldNotBeNil)
+	sessions.Set("c", new(serverConn))
+	assert.NotNil(sessions.Get("c"))
 
-		sessions.Remove("b")
-		So(sessions.Get("b"), ShouldBeNil)
-	})
+	sessions.Remove("b")
+	assert.Nil(sessions.Get("b"))
+
 }
