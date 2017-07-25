@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -251,11 +250,6 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	}
 }
 func (c *serverConn) noopLoop() {
-	defer func() {
-		if err := recover(); err != nil {
-			log.Println("Error:", err)
-		}
-	}()
 	i := 0
 	for c.getUpgrade() != nil && i <= 300 {
 		c.writerLocker.Lock()
