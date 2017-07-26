@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"time"
@@ -165,24 +166,28 @@ func (c *serverConn) Close() error {
 	if c.upgrading != nil {
 		c.upgrading.Close()
 	}
-	if c.getCurrent() != nil {
-		c.writerLocker.Lock()
-		if w, err := c.getCurrent().NextWriter(message.MessageText, parser.CLOSE); err == nil {
-			writer := newConnWriter(w, &c.writerLocker)
-			writer.Close()
-		} else {
-			c.writerLocker.Unlock()
-		}
-		if err := c.getCurrent().Close(); err != nil {
-			return err
-		}
+	t := c.getCurrent()
+	if t == nil {
+		return nil
 	}
-	return nil
+	c.writerLocker.Lock()
+	if w, err := t.NextWriter(message.MessageText, parser.CLOSE); err == nil {
+		writer := newConnWriter(w, &c.writerLocker)
+		writer.Close()
+	} else {
+		c.writerLocker.Unlock()
+	}
+	err := t.Close()
+	return err
 }
 
 func (c *serverConn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// Don't allow from websocket upgrade to polling
+	if c.getCurrentName() == websocketProtocol {
+		return
+	}
 	transportName := r.URL.Query().Get("transport")
-	if c.currentName != transportName {
+	if c.getCurrentName() != transportName {
 		creater := c.callback.transports().Get(transportName)
 		if creater.Name == "" {
 			http.Error(w, fmt.Sprintf("invalid transport %s", transportName), http.StatusBadRequest)
@@ -203,6 +208,11 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	if s := c.getState(); s != stateNormal && s != stateUpgrading {
 		return
 	}
+	defer func() {
+		if err := recover(); err != nil {
+			log.Println("Error:", err)
+		}
+	}()
 	switch r.Type() {
 	case parser.OPEN:
 	case parser.CLOSE:
@@ -211,18 +221,6 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 		c.writerLocker.Lock()
 		t := c.getCurrent()
 		u := c.getUpgrade()
-		if t == nil {
-			for i := 0; i < 10; i++ {
-				time.Sleep(50 * time.Millisecond)
-				t = c.getCurrent()
-				if t != nil {
-					break
-				}
-			}
-			if t == nil {
-				return
-			}
-		}
 		newWriter := t.NextWriter
 		if u != nil {
 			newWriter = u.NextWriter
@@ -249,25 +247,31 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	case parser.NOOP:
 	}
 }
+
+var upgradeTimes = 0
+
 func (c *serverConn) noopLoop() {
-	i := 0
-	for c.getUpgrade() != nil && i <= 300 {
+	for upgradeTimes <= 300 {
+		var t transport.Server
+		c.transportLocker.RLock()
+		if c.currentName == pollingProtocol && len(c.upgradingName) > 0 {
+			t = c.current
+		}
+		c.transportLocker.RUnlock()
+		if t == nil {
+			return
+		}
 		c.writerLocker.Lock()
-		t := c.getCurrent()
-		var err error
-		var w io.WriteCloser
-		if c.getUpgrade() != nil {
-			w, err = t.NextWriter(message.MessageText, parser.NOOP)
-			if w != nil {
-				w.Close()
-			}
+		w, err := t.NextWriter(message.MessageText, parser.NOOP)
+		if w != nil {
+			w.Close()
 		}
 		c.writerLocker.Unlock()
 		if err != nil {
 			return
 		}
+		upgradeTimes++
 		time.Sleep(100 * time.Millisecond)
-		i++
 	}
 }
 func (c *serverConn) OnClose(server transport.Server) {
@@ -298,7 +302,7 @@ func (c *serverConn) OnClose(server transport.Server) {
 func (c *serverConn) onOpen() error {
 	upgrades := []string{}
 	for name := range c.callback.transports() {
-		if name == c.currentName {
+		if name == c.currentName || c.currentName == websocketProtocol {
 			continue
 		}
 		upgrades = append(upgrades, name)
@@ -334,6 +338,11 @@ func (c *serverConn) getCurrent() transport.Server {
 	defer c.transportLocker.RUnlock()
 
 	return c.current
+}
+func (c *serverConn) getCurrentName() string {
+	c.transportLocker.RLock()
+	defer c.transportLocker.RUnlock()
+	return c.currentName
 }
 
 func (c *serverConn) getUpgrade() transport.Server {

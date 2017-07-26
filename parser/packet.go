@@ -116,7 +116,7 @@ func (e *PacketEncoder) Close() error {
 	return nil
 }
 
-// packetDecoder is the decoder which decode data to packet.
+// PacketDecoder is the decoder which decode data to packet.
 type PacketDecoder struct {
 	closer  io.Closer
 	r       io.Reader

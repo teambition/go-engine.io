@@ -96,7 +96,7 @@ func TestWebsocket(t *testing.T) {
 
 	event := <-client.Event
 	assert.Equal("open", event.Type)
-	assert.Contains(string(event.Data), `"upgrades":["polling"],"pingInterval":25000,"pingTimeout":60000}`)
+	assert.Contains(string(event.Data), `"upgrades":[],"pingInterval":25000,"pingTimeout":60000}`)
 	assert.NotNil(event.Data)
 	for i := 0; i < 10; i++ {
 		client.SendMessage(testData1)
@@ -188,7 +188,7 @@ func TestPing(t *testing.T) {
 
 	event := <-client.Event
 	assert.Equal("open", event.Type)
-	assert.Contains(string(event.Data), `"upgrades":["polling"],"pingInterval":25000,"pingTimeout":60000}`)
+	assert.Contains(string(event.Data), `"upgrades":[],"pingInterval":25000,"pingTimeout":60000}`)
 
 	time.Sleep(20 * time.Millisecond)
 	client.SendPacket(&transports.Packet{Type: transports.Ping})

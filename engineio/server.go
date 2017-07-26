@@ -30,22 +30,25 @@ type Server struct {
 	creaters       transportCreaters
 }
 
+var websocketProtocol = "websocket"
+var pollingProtocol = "polling"
+
 // NewServer returns the server suppported given transports. If transports is nil, server will use ["polling", "websocket"] as default.
 func NewServer(transports []string) (*Server, error) {
 	if transports == nil {
-		transports = []string{"polling", "websocket"}
+		transports = []string{pollingProtocol, websocketProtocol}
 	}
 	creaters := make(transportCreaters)
 	for _, t := range transports {
 		switch t {
-		case "polling":
+		case pollingProtocol:
 			creaters[t] = transport.Creater{
-				Name:   "polling",
+				Name:   pollingProtocol,
 				Server: polling.NewServer,
 			}
-		case "websocket":
+		case websocketProtocol:
 			creaters[t] = transport.Creater{
-				Name:   "websocket",
+				Name:   websocketProtocol,
 				Server: websocket.NewServer,
 			}
 		default:
