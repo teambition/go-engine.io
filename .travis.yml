@@ -7,9 +7,9 @@ before_install:
   - go get github.com/modocache/gover
   - go get github.com/mattn/goveralls
 script:
-  - go test -coverprofile="engineio.coverprofile" ./engineio
-  - go test -coverprofile="parser.coverprofile" ./parser
-  - go test -coverprofile="polling.coverprofile" ./polling
-  - go test -coverprofile="websocket.coverprofile" ./websocket
+  - go test -race -coverprofile="engineio.coverprofile" ./engineio
+  - go test -race -coverprofile="parser.coverprofile" ./parser
+  - go test -race -coverprofile="polling.coverprofile" ./polling
+  - go test -race -coverprofile="websocket.coverprofile" ./websocket
   - gover
   - goveralls -coverprofile=gover.coverprofile -service=travis-ci

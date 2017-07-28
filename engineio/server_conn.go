@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/teambition/go-engine.io/message"
@@ -60,6 +61,7 @@ type Conn interface {
 	LastPing() time.Time
 }
 
+// InvalidError ...
 var InvalidError = errors.New("invalid transport")
 
 func newServerConn(id string, w http.ResponseWriter, r *http.Request, callback serverCallback) (*serverConn, error) {
@@ -177,6 +179,8 @@ func (c *serverConn) Close() error {
 	} else {
 		c.writerLocker.Unlock()
 	}
+	c.writerLocker.Lock()
+	defer c.writerLocker.Unlock()
 	err := t.Close()
 	return err
 }
@@ -201,7 +205,7 @@ func (c *serverConn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.setUpgrading(creater.Name, u)
 		return
 	}
-	c.current.ServeHTTP(w, r)
+	c.getCurrent().ServeHTTP(w, r)
 }
 
 func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
@@ -248,10 +252,10 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	}
 }
 
-var upgradeTimes = 0
+var upgradeTimes int32 = 0
 
 func (c *serverConn) noopLoop() {
-	for upgradeTimes <= 300 {
+	for {
 		var t transport.Server
 		c.transportLocker.RLock()
 		if c.currentName == pollingProtocol && len(c.upgradingName) > 0 {
@@ -270,7 +274,10 @@ func (c *serverConn) noopLoop() {
 		if err != nil {
 			return
 		}
-		upgradeTimes++
+		times := atomic.AddInt32(&upgradeTimes, 1)
+		if times > 300 {
+			return
+		}
 		time.Sleep(100 * time.Millisecond)
 	}
 }
@@ -319,6 +326,8 @@ func (c *serverConn) onOpen() error {
 		PingInterval: c.callback.configure().PingInterval / time.Millisecond,
 		PingTimeout:  c.callback.configure().PingTimeout / time.Millisecond,
 	}
+	c.writerLocker.Lock()
+	defer c.writerLocker.Unlock()
 	w, err := c.getCurrent().NextWriter(message.MessageText, parser.OPEN)
 	if err != nil {
 		return err

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -111,6 +112,7 @@ func TestWebsocket(t *testing.T) {
 }
 func TestPolling(t *testing.T) {
 	assert := assert.New(t)
+	lock := &sync.RWMutex{}
 	sync := make(chan int)
 	var wsurl, sid string
 
@@ -126,7 +128,9 @@ func TestPolling(t *testing.T) {
 		conn, err := websocket.Accept()
 
 		assert.Nil(err)
+		lock.Lock()
 		sid = conn.Id()
+		lock.Unlock()
 		assert.NotEmpty(sid)
 
 		err = write(conn, testData1)
@@ -145,7 +149,9 @@ func TestPolling(t *testing.T) {
 	bodyBytes, err := ioutil.ReadAll(res.Body)
 	assert.Contains(string(bodyBytes), `"upgrades":["websocket"],"pingInterval":25000,"pingTimeout":60000}`)
 
+	lock.RLock()
 	res, err = pollingClient.Do(newOpenReq(wsurl + "?sid=" + sid))
+	lock.RUnlock()
 	bodyBytes, err = ioutil.ReadAll(res.Body)
 	assert.Contains(string(bodyBytes), string(testData1))
 
@@ -201,7 +207,8 @@ func TestPing(t *testing.T) {
 }
 func TestUpgrades(t *testing.T) {
 	assert := assert.New(t)
-	sync := make(chan int)
+	syncs := make(chan int)
+	lock := sync.RWMutex{}
 	var wsurl, sid string
 
 	go func() {
@@ -210,13 +217,15 @@ func TestUpgrades(t *testing.T) {
 			websocket.ServeHTTP(w, r)
 		}))
 		wsurl = server.URL
-		sync <- 1
+		syncs <- 1
 		conn, err := websocket.Accept()
 		assert.Nil(err)
+		lock.Lock()
 		sid = conn.Id()
-		<-sync
+		lock.Unlock()
+		<-syncs
 	}()
-	<-sync
+	<-syncs
 
 	pollingClient := &http.Client{}
 	res, err := pollingClient.Do(newOpenReq(wsurl))
@@ -228,7 +237,9 @@ func TestUpgrades(t *testing.T) {
 
 	go func() {
 		time.Sleep(10 * time.Millisecond)
+		lock.RLock()
 		client, err := wsclient.NewClient(getURL(wsurl) + "?transport=websocket&sid=" + sid)
+		lock.RUnlock()
 		if assert.Nil(err) {
 			client.SendPacket(&transports.Packet{Type: transports.Ping, Data: []byte("probe")})
 		}
@@ -239,7 +250,9 @@ func TestUpgrades(t *testing.T) {
 		client.SendPacket(&transports.Packet{Type: transports.Upgrade})
 		time.Sleep(20 * time.Millisecond)
 	}()
+	lock.RLock()
 	res, err = pollingClient.Do(newOpenReq(wsurl + "?sid=" + sid))
+	lock.RUnlock()
 	assert.Nil(err)
 	assert.Equal(200, res.StatusCode)
 	bodyBytes, err = ioutil.ReadAll(res.Body)

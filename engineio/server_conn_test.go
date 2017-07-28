@@ -54,11 +54,14 @@ func TestCloseByWebsocket(t *testing.T) {
 	server := newFakeServer()
 	id := "id"
 	var conn *serverConn
+	lock := &sync.RWMutex{}
 
 	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if conn == nil {
 			var err error
+			lock.Lock()
 			conn, err = newServerConn(id, w, r, server)
+			lock.Unlock()
 			if err != nil {
 				log.Println(err)
 			}
@@ -81,10 +84,12 @@ func TestCloseByWebsocket(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 	assert.Equal(1, server.getClosedVal(id))
 
+	lock.RLock()
 	if assert.NotNil(conn) {
 		err = conn.Close()
 		assert.Nil(err)
 	}
+	lock.RUnlock()
 }
 func TestWithoutTransport(t *testing.T) {
 	assert := assert.New(t)
