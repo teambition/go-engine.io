@@ -188,6 +188,7 @@ func (c *serverConn) Close() error {
 func (c *serverConn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Don't allow from websocket upgrade to polling
 	if c.getCurrentName() == websocketProtocol {
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 	transportName := r.URL.Query().Get("transport")
