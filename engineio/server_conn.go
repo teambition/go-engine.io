@@ -8,7 +8,6 @@ import (
 	"log"
 	"net/http"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/teambition/go-engine.io/message"
@@ -186,13 +185,13 @@ func (c *serverConn) Close() error {
 }
 
 func (c *serverConn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	// Don't allow from websocket upgrade to polling
-	if c.getCurrentName() == websocketProtocol {
-		w.WriteHeader(http.StatusOK)
-		return
-	}
 	transportName := r.URL.Query().Get("transport")
 	if c.getCurrentName() != transportName {
+		// Don't allow from websocket upgrade to polling
+		if c.getCurrentName() == websocketProtocol {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		creater := c.callback.transports().Get(transportName)
 		if creater.Name == "" {
 			http.Error(w, fmt.Sprintf("invalid transport %s", transportName), http.StatusBadRequest)
@@ -253,10 +252,9 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	}
 }
 
-var upgradeTimes int32 = 0
-
 func (c *serverConn) noopLoop() {
-	for {
+	upgradeTimes := 0
+	for upgradeTimes < 300 {
 		var t transport.Server
 		c.transportLocker.RLock()
 		if c.currentName == pollingProtocol && len(c.upgradingName) > 0 {
@@ -275,10 +273,7 @@ func (c *serverConn) noopLoop() {
 		if err != nil {
 			return
 		}
-		times := atomic.AddInt32(&upgradeTimes, 1)
-		if times > 300 {
-			return
-		}
+		upgradeTimes++
 		time.Sleep(100 * time.Millisecond)
 	}
 }
