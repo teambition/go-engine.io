@@ -248,7 +248,6 @@ func TestUpgrades(t *testing.T) {
 		assert.Equal("probe", string(event.Data))
 
 		client.SendPacket(&transports.Packet{Type: transports.Upgrade})
-		time.Sleep(20 * time.Millisecond)
 	}()
 	lock.RLock()
 	res, err = pollingClient.Do(newOpenReq(wsurl + "?sid=" + sid))

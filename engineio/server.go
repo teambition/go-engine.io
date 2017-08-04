@@ -128,7 +128,10 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		sid = s.config.NewId(r)
-
+		if sid == "" {
+			http.Error(w, "empty sid", http.StatusBadRequest)
+			return
+		}
 		var err error
 		conn, err = newServerConn(sid, w, r, s)
 		if err != nil {

@@ -224,6 +224,19 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	case parser.PING:
 		c.writerLocker.Lock()
 		t := c.getCurrent()
+		if t == nil {
+			for i := 0; i < 100; i++ {
+				time.Sleep(100 * time.Millisecond)
+				t = c.getCurrent()
+				if t != nil {
+					break
+				}
+			}
+			if t == nil {
+				c.writerLocker.Unlock()
+				return
+			}
+		}
 		u := c.getUpgrade()
 		newWriter := t.NextWriter
 		if u != nil {
