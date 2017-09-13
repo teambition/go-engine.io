@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime"
 	"sync"
 	"time"
 
@@ -146,7 +147,12 @@ func (c *serverConn) NextWriter(t MessageType) (io.WriteCloser, error) {
 		return nil, io.EOF
 	}
 	c.writerLocker.Lock()
-	ret, err := c.getCurrent().NextWriter(message.MessageType(t), parser.MESSAGE)
+	current := c.getCurrent()
+	if current == nil {
+		c.writerLocker.Unlock()
+		return nil, errors.New("current connection is nil")
+	}
+	ret, err := current.NextWriter(message.MessageType(t), parser.MESSAGE)
 	if err != nil {
 		c.writerLocker.Unlock()
 		return ret, err
@@ -208,13 +214,20 @@ func (c *serverConn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	c.getCurrent().ServeHTTP(w, r)
 }
 
+// Stack formats a stack trace of the calling goroutine
+func Stack() string {
+	buf := make([]byte, 2048)
+	n := runtime.Stack(buf, false)
+	return string(buf[:n])
+}
+
 func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	if s := c.getState(); s != stateNormal && s != stateUpgrading {
 		return
 	}
 	defer func() {
 		if err := recover(); err != nil {
-			log.Println("Error:", err)
+			log.Println(Stack())
 		}
 	}()
 	switch r.Type() {
