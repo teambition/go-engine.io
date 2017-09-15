@@ -105,10 +105,12 @@ type serverConn struct {
 	state           state
 	stateLocker     sync.RWMutex
 	readerChan      chan *connReader
+	closeReaderChan bool
 	pingTimeout     time.Duration
 	pingInterval    time.Duration
 	pingLocker      sync.Mutex
 	lastPing        time.Time
+	packetLock      sync.Mutex
 }
 
 func (c *serverConn) Id() string {
@@ -225,7 +227,9 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	if s := c.getState(); s != stateNormal && s != stateUpgrading {
 		return
 	}
+	c.packetLock.Lock()
 	defer func() {
+		c.packetLock.Unlock()
 		if err := recover(); err != nil {
 			log.Println(Stack())
 		}
@@ -235,27 +239,13 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	case parser.CLOSE:
 		c.getCurrent().Close()
 	case parser.PING:
-		c.writerLocker.Lock()
 		t := c.getCurrent()
-		if t == nil {
-			for i := 0; i < 100; i++ {
-				time.Sleep(100 * time.Millisecond)
-				t = c.getCurrent()
-				if t != nil {
-					break
-				}
-			}
-			if t == nil {
-				c.writerLocker.Unlock()
-				return
-			}
-		}
 		u := c.getUpgrade()
-		newWriter := t.NextWriter
 		if u != nil {
-			newWriter = u.NextWriter
+			t = u
 		}
-		if w, _ := newWriter(message.MessageText, parser.PONG); w != nil {
+		c.writerLocker.Lock()
+		if w, _ := t.NextWriter(message.MessageText, parser.PONG); w != nil {
 			io.Copy(w, r)
 			w.Close()
 		}
@@ -263,9 +253,7 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 		if u != nil {
 			go c.noopLoop()
 		}
-		c.pingLocker.Lock()
-		c.lastPing = time.Now()
-		c.pingLocker.Unlock()
+		c.setPing()
 	case parser.MESSAGE:
 		closeChan := make(chan struct{})
 		c.readerChan <- newConnReader(r, closeChan)
@@ -304,28 +292,36 @@ func (c *serverConn) noopLoop() {
 	}
 }
 func (c *serverConn) OnClose(server transport.Server) {
-	if t := c.getUpgrade(); server == t {
-		c.setUpgrading("", nil)
-		t.Close()
+	if c.getState() == stateClosed {
 		return
 	}
-	t := c.getCurrent()
-	if server != t {
-		return
+	if c.getState() != stateClosing {
+		if t := c.getUpgrade(); server == t {
+			c.setUpgrading("", nil)
+			return
+		}
+		t := c.getCurrent()
+		if server != t {
+			return
+		}
+		if t := c.getUpgrade(); t != nil {
+			t.Close()
+			c.setUpgrading("", nil)
+		}
 	}
-	t.Close()
-	if t := c.getUpgrade(); t != nil {
-		t.Close()
-		c.setUpgrading("", nil)
-	}
-
+	c.closeConn()
+	c.callback.onClose(c.id)
+}
+func (c *serverConn) closeConn() {
 	c.stateLocker.Lock()
+	defer c.stateLocker.Unlock()
 	if c.state != stateClosed {
 		c.state = stateClosed
+	}
+	if c.closeReaderChan == false {
+		c.closeReaderChan = true
 		close(c.readerChan)
 	}
-	c.stateLocker.Unlock()
-	c.callback.onClose(c.id)
 }
 
 func (c *serverConn) onOpen() error {
@@ -402,7 +398,10 @@ func (c *serverConn) setUpgrading(name string, s transport.Server) {
 
 func (c *serverConn) upgraded() {
 	c.transportLocker.Lock()
-
+	if c.upgrading == nil {
+		c.transportLocker.Unlock()
+		return
+	}
 	current := c.current
 	c.current = c.upgrading
 	c.currentName = c.upgradingName
@@ -431,4 +430,9 @@ func (c *serverConn) LastPing() time.Time {
 	c.pingLocker.Lock()
 	defer c.pingLocker.Unlock()
 	return c.lastPing
+}
+func (c *serverConn) setPing() {
+	c.pingLocker.Lock()
+	defer c.pingLocker.Unlock()
+	c.lastPing = time.Now()
 }
