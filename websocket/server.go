@@ -32,6 +32,13 @@ func NewServer(w http.ResponseWriter, r *http.Request, callback transport.Callba
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "POST" {
+		parser.PollingPost(w, r, func(r *parser.PacketDecoder) {
+			if r.Type() == parser.MESSAGE {
+				s.callback.OnPacket(r)
+			}
+		})
+	}
 }
 
 func (s *Server) NextWriter(msgType message.MessageType, packetType parser.PacketType) (io.WriteCloser, error) {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/teambition/go-engine.io/client"
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
@@ -18,36 +19,70 @@ import (
 	"github.com/teambition/go-engine.io/websocket"
 )
 
-func TestWithWebsocket(t *testing.T) {
+var (
+	testData  = `{"jsonrpc": "2.0", "method": "subtract", "params": {"minuend": 42, "subtrahend": 23}, "id": 4}"`
+	testBytes = []byte(`{"jsonrpc": "2.0", "method": "subtract", "params": {"minuend": 42, "subtrahend": 23}, "id": 4`)
+)
+
+func TestWebsocketMsg(t *testing.T) {
 	assert := assert.New(t)
-	server := newFakeServer()
-	h := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		conn, err := newServerConn("id", w, r, server)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer conn.Close()
+	require := require.New(t)
 
-		if conn.Id() != "id" {
-			t.Fatal(err)
-		}
-		if conn.Request() != r {
-			t.Fatal(err)
-		}
-	}))
-	defer h.Close()
+	req, err := http.NewRequest("GET", testWSURL+"?transport=websocket", nil)
+	require.Nil(err)
 
-	u, _ := url.Parse(h.URL)
-	u.Scheme = "ws"
-	req, err := http.NewRequest("GET", u.String()+"/?transport=websocket", nil)
+	ws, err := client.NewWebsocket(req)
 	assert.Nil(err)
-	assert.NotNil(req)
+	packet, err := ws.NextReader()
+	require.Nil(err)
 
-	c, err := client.NewWebsocket(req)
-	assert.Nil(err)
-	time.Sleep(100 * time.Millisecond)
-	defer c.Close()
+	assert.Equal(parser.OPEN, packet.Type())
+	assert.Contains(readPacket(packet), `"upgrades":[],"pingInterval":25000,"pingTimeout":60000}`)
+	packet.Close()
+
+	w := sync.WaitGroup{}
+	w.Add(1000)
+	go func() {
+		for i := 0; i < 1000; i++ {
+			packet, err := ws.NextReader()
+			require.Nil(err)
+			assert.Equal(testData, readPacket(packet))
+			packet.Close()
+			w.Done()
+		}
+	}()
+	for i := 0; i < 1000; i++ {
+		err = writeMsgPacket(ws, testData)
+		require.Nil(err)
+	}
+	w.Wait()
 }
+
+func TestPollingMsg(t *testing.T) {
+	assert := assert.New(t)
+
+	info := pollingHandShake(t)
+	for i := 0; i < 1000; i++ {
+		req, err := http.NewRequest("POST", testURL+"?transport=polling&sid="+info.Sid, nil)
+		assert.Nil(err)
+		assert.NotNil(req)
+		polling, err := client.NewPolling(req)
+		assert.Nil(err)
+		err = writeMsgPacket(polling, testData)
+		assert.Nil(err)
+
+		req, err = http.NewRequest("GET", testURL+"?transport=polling&sid="+info.Sid, nil)
+		assert.Nil(err)
+		assert.NotNil(req)
+		ws, err := client.NewPolling(req)
+		assert.Nil(err)
+		packet, err := ws.NextReader()
+		assert.Nil(err)
+		assert.Equal(testData, readPacket(packet))
+		packet.Close()
+	}
+}
+
 func TestCloseByWebsocket(t *testing.T) {
 	assert := assert.New(t)
 
@@ -338,3 +373,73 @@ func (f *FakeServer) getClosedVal(sid string) int {
 	defer f.closedLocker.Unlock()
 	return f.closed[sid]
 }
+
+//func TestPollingMsg(t *testing.T) {
+// 	assert := assert.New(t)
+// 	require := require.New(t)
+
+// 	req, err := http.NewRequest("GET", testURL+"?transport=polling", nil)
+// 	require.Nil(err)
+// 	assert.NotNil(req)
+// 	ws, err := client.NewPolling(req)
+// 	assert.Nil(err)
+// 	packet, err := ws.NextReader()
+// 	require.Nil(err)
+
+// 	result := readPacket(packet)
+// 	var info connectionInfo
+// 	err = json.Unmarshal([]byte(result), &info)
+// 	require.Nil(err)
+
+// 	require.Contains(result, `"upgrades":["websocket"],"pingInterval":25000,"pingTimeout":60000}`)
+// 	require.Equal(parser.OPEN, packet.Type())
+// 	require.NotEmpty(info.Sid)
+
+// 	packet.Close()
+
+// 	w := sync.WaitGroup{}
+// 	num := 1000
+// 	w.Add(num)
+// 	go func() {
+// 		for i := 0; i < num; i++ {
+// 			req, err := http.NewRequest("GET", testURL+"?transport=polling&sid="+info.Sid, nil)
+// 			if err != nil {
+// 				panic(err)
+// 			}
+// 			assert.NotNil(req)
+// 			ws, err := client.NewPolling(req)
+// 			if err != nil {
+// 				panic(err)
+// 			}
+// 			packet, err := ws.NextReader()
+// 			if err != nil {
+// 				panic(err)
+// 			}
+// 			result := readPacket(packet)
+// 			if result != "aa" {
+// 				panic(result)
+// 			}
+// 			packet.Close()
+// 			w.Done()
+// 			log.Println("read:", i)
+// 		}
+// 	}()
+// 	for i := 0; i < num; i++ {
+// 		req, err := http.NewRequest("POST", testURL+"?transport=polling&sid="+info.Sid, nil)
+// 		if err != nil {
+// 			panic(err)
+// 		}
+// 		assert.NotNil(req)
+
+// 		polling, err := client.NewPolling(req)
+// 		assert.Nil(err)
+
+// 		err = writeMsgPacket(polling, "aa")
+// 		if err != nil {
+// 			panic(err)
+// 		}
+// 		log.Println("client write:", i)
+// 	}
+// 	log.Println("write over")
+// 	w.Wait()
+// }

@@ -6,17 +6,134 @@ import (
 	"io"
 	"io/ioutil"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
-	"sync"
 	"testing"
 	"time"
 
 	wsclient "github.com/mushroomsir/engine.io"
 	"github.com/mushroomsir/engine.io/transports"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"github.com/teambition/go-engine.io/client"
 	"github.com/teambition/go-engine.io/parser"
 )
+
+func TestWebsocket(t *testing.T) {
+	assert := assert.New(t)
+
+	client, _ := wsclient.NewClient(testWSURL + "?transport=websocket")
+	event := <-client.Event
+	assert.Equal("open", event.Type)
+	assert.Contains(string(event.Data), `"upgrades":[],"pingInterval":25000,"pingTimeout":60000}`)
+	assert.NotNil(event.Data)
+	for i := 0; i < 100; i++ {
+		client.SendMessage(testBytes)
+		event := <-client.Event
+		assert.Equal("message", event.Type)
+		assert.Equal(testBytes, event.Data)
+	}
+}
+
+func TestWebsocketPing(t *testing.T) {
+	assert := assert.New(t)
+	client, _ := wsclient.NewClient(testWSURL + "?transport=websocket")
+
+	event := <-client.Event
+	assert.Equal("open", event.Type)
+	assert.Contains(string(event.Data), `"upgrades":[],"pingInterval":25000,"pingTimeout":60000}`)
+
+	for i := 0; i < 100; i++ {
+		client.SendPacket(&transports.Packet{Type: transports.Ping})
+		event = <-client.Event
+		assert.Equal("pong", event.Type)
+	}
+}
+
+func TestPollingPing(t *testing.T) {
+	assert := assert.New(t)
+	info := pollingHandShake(t)
+
+	req, err := http.NewRequest("POST", testURL+"?transport=polling&sid="+info.Sid, nil)
+	assert.Nil(err)
+	polling, err := client.NewPolling(req)
+	assert.Nil(err)
+	err = writePing(polling)
+	assert.Nil(err)
+}
+func TestUpgrades(t *testing.T) {
+	assert := assert.New(t)
+	require := require.New(t)
+
+	//====== Start =====
+	req, err := http.NewRequest("GET", testURL+"?transport=polling", nil)
+	require.Nil(err)
+	polling, err := client.NewPolling(req)
+	assert.Nil(err)
+	packet, err := polling.NextReader()
+	require.Nil(err)
+	result := readPacket(packet)
+	var info connectionInfo
+	err = json.Unmarshal([]byte(result), &info)
+	require.Nil(err)
+	require.Contains(result, `"upgrades":["websocket"],"pingInterval":25000,"pingTimeout":60000}`)
+	require.Equal(parser.OPEN, packet.Type())
+	require.NotEmpty(info.Sid)
+	packet.Close()
+	//====== End =====
+	go func() {
+		wsclient, err := wsclient.NewClient(testWSURL + "?transport=websocket&sid=" + info.Sid)
+		require.Nil(err)
+		wsclient.SendPacket(&transports.Packet{Type: transports.Ping, Data: []byte("probe")})
+		event := <-wsclient.Event
+		assert.Equal("pong", event.Type)
+		assert.Equal("probe", string(event.Data))
+
+		wsclient.SendPacket(&transports.Packet{Type: transports.Upgrade})
+
+		for i := 0; i < 1; i++ {
+			req, err := http.NewRequest("POST", testURL+"?transport=polling&sid="+info.Sid, nil)
+			assert.Nil(err)
+			polling, err := client.NewPolling(req)
+			assert.Nil(err)
+			err = writeMsgPacket(polling, testData)
+			assert.Nil(err)
+
+			event := <-wsclient.Event
+			assert.Equal(testData, string(event.Data))
+
+			wsclient.SendMessage(testBytes)
+			event = <-wsclient.Event
+			assert.Equal(testBytes, event.Data)
+
+			// ws ping
+			wsclient.SendPacket(&transports.Packet{Type: transports.Ping})
+			event = <-wsclient.Event
+			assert.Equal("pong", event.Type)
+
+			// polling ping, server will ignore it
+			req, err = http.NewRequest("POST", testURL+"?transport=polling&sid="+info.Sid, nil)
+			assert.Nil(err)
+			polling, err = client.NewPolling(req)
+			assert.Nil(err)
+			err = writePing(polling)
+			assert.Nil(err)
+		}
+	}()
+	go func() {
+		for i := 0; i < 1; i++ {
+			req, err = http.NewRequest("GET", testURL+"?transport=polling&sid="+info.Sid, nil)
+			require.Nil(err)
+			polling, err = client.NewPolling(req)
+			assert.Nil(err)
+			packet, err = polling.NextReader()
+			require.Nil(err)
+			result = readPacket(packet)
+			assert.Equal(200, polling.Response().StatusCode)
+			assert.Equal(result, "")
+		}
+	}()
+
+}
 
 func TestSetupServer(t *testing.T) {
 	assert := assert.New(t)
@@ -65,200 +182,7 @@ func TestCreateServer(t *testing.T) {
 
 	server.SetSessionManager(nil)
 }
-func TestWebsocket(t *testing.T) {
-	assert := assert.New(t)
-	sync := make(chan int)
-	var wsurl string
 
-	testData1 := []byte(`{"jsonrpc": "2.0", "method": "subtract", "params": {"minuend": 42, "subtrahend": 23}, "id": 4`)
-	testData1Reply := []byte(`{"jsonrpc": "2.0", "result": 19, "id": 4}`)
-	go func() {
-		websocket, _ := NewServer(nil)
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			websocket.ServeHTTP(w, r)
-		}))
-		wsurl = getURL(server.URL)
-		sync <- 1
-		conn, err := websocket.Accept()
-		assert.Nil(err)
-		for i := 0; i < 10; i++ {
-			b, err := read(conn)
-			assert.Nil(err)
-			assert.Equal(testData1, b)
-			write(conn, testData1Reply)
-		}
-		b, err := read(conn)
-		assert.Nil(b)
-		assert.Equal(io.EOF, err)
-		sync <- 1
-	}()
-	<-sync
-	client, _ := wsclient.NewClient(wsurl)
-
-	event := <-client.Event
-	assert.Equal("open", event.Type)
-	assert.Contains(string(event.Data), `"upgrades":[],"pingInterval":25000,"pingTimeout":60000}`)
-	assert.NotNil(event.Data)
-	for i := 0; i < 10; i++ {
-		client.SendMessage(testData1)
-
-		event := <-client.Event
-		assert.Equal("message", event.Type)
-		assert.Equal(testData1Reply, event.Data)
-	}
-	err := client.Close()
-	assert.Nil(err)
-	<-sync
-}
-func TestPolling(t *testing.T) {
-	assert := assert.New(t)
-	lock := &sync.RWMutex{}
-	sync := make(chan int)
-	var wsurl, sid string
-
-	testData1 := []byte(`{"jsonrpc": "2.0", "method": "subtract", "params": {"minuend": 42, "subtrahend": 23}, "id": 4`)
-	testData1Reply := []byte(`47:4{"jsonrpc": "2.0", "result": "OK", "id": 4}`)
-	go func() {
-		websocket, _ := NewServer(nil)
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			websocket.ServeHTTP(w, r)
-		}))
-		wsurl = server.URL
-		sync <- 1
-		conn, err := websocket.Accept()
-
-		assert.Nil(err)
-		lock.Lock()
-		sid = conn.Id()
-		lock.Unlock()
-		assert.NotEmpty(sid)
-
-		err = write(conn, testData1)
-		assert.Nil(err)
-
-		b, err := read(conn)
-		assert.Nil(err)
-		assert.Equal(`{"jsonrpc": "2.0", "result": "OK", "id": 4}`, string(b))
-		sync <- 1
-	}()
-	<-sync
-	pollingClient := &http.Client{}
-	res, err := pollingClient.Do(newOpenReq(wsurl))
-	assert.Nil(err)
-	assert.Equal(200, res.StatusCode)
-	bodyBytes, err := ioutil.ReadAll(res.Body)
-	assert.Contains(string(bodyBytes), `"upgrades":["websocket"],"pingInterval":25000,"pingTimeout":60000}`)
-
-	lock.RLock()
-	res, err = pollingClient.Do(newOpenReq(wsurl + "?sid=" + sid))
-	lock.RUnlock()
-	bodyBytes, err = ioutil.ReadAll(res.Body)
-	assert.Contains(string(bodyBytes), string(testData1))
-
-	res, err = pollingClient.Post(wsurl+"?transport=polling&sid="+sid, "application/json", bytes.NewBuffer(testData1Reply))
-	assert.Nil(err)
-	assert.Equal(200, res.StatusCode)
-	bodyBytes, err = ioutil.ReadAll(res.Body)
-	assert.Equal(string(bodyBytes), "ok")
-	<-sync
-
-}
-func TestPing(t *testing.T) {
-	assert := assert.New(t)
-	sync := make(chan int)
-	var wsurl string
-
-	go func() {
-		websocket, _ := NewServer(nil)
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			websocket.ServeHTTP(w, r)
-		}))
-		wsurl = getURL(server.URL)
-		sync <- 1
-		conn, err := websocket.Accept()
-		assert.Nil(err)
-
-		<-sync
-		ping1 := conn.LastPing()
-		<-sync
-		ping2 := conn.LastPing()
-		a1 := ping1.Equal(ping2)
-		assert.False(a1)
-
-		a2 := ping2.After(ping1)
-		assert.True(a2)
-		sync <- 1
-	}()
-	<-sync
-	client, _ := wsclient.NewClient(wsurl)
-
-	event := <-client.Event
-	assert.Equal("open", event.Type)
-	assert.Contains(string(event.Data), `"upgrades":[],"pingInterval":25000,"pingTimeout":60000}`)
-
-	time.Sleep(20 * time.Millisecond)
-	client.SendPacket(&transports.Packet{Type: transports.Ping})
-	sync <- 1
-	time.Sleep(20 * time.Millisecond)
-	client.SendPacket(&transports.Packet{Type: transports.Ping})
-	sync <- 1
-	<-sync
-
-}
-func TestUpgrades(t *testing.T) {
-	assert := assert.New(t)
-	syncs := make(chan int)
-	lock := sync.RWMutex{}
-	var wsurl, sid string
-
-	go func() {
-		websocket, _ := NewServer(nil)
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			websocket.ServeHTTP(w, r)
-		}))
-		wsurl = server.URL
-		syncs <- 1
-		conn, err := websocket.Accept()
-		assert.Nil(err)
-		lock.Lock()
-		sid = conn.Id()
-		lock.Unlock()
-		<-syncs
-	}()
-	<-syncs
-
-	pollingClient := &http.Client{}
-	res, err := pollingClient.Do(newOpenReq(wsurl))
-
-	assert.Nil(err)
-	assert.Equal(200, res.StatusCode)
-	bodyBytes, err := ioutil.ReadAll(res.Body)
-	assert.Contains(string(bodyBytes), `"upgrades":["websocket"],"pingInterval":25000,"pingTimeout":60000}`)
-
-	go func() {
-		time.Sleep(10 * time.Millisecond)
-		lock.RLock()
-		client, err := wsclient.NewClient(getURL(wsurl) + "?transport=websocket&sid=" + sid)
-		lock.RUnlock()
-		if assert.Nil(err) {
-			client.SendPacket(&transports.Packet{Type: transports.Ping, Data: []byte("probe")})
-		}
-		event := <-client.Event
-		assert.Equal("pong", event.Type)
-		assert.Equal("probe", string(event.Data))
-
-		client.SendPacket(&transports.Packet{Type: transports.Upgrade})
-	}()
-	lock.RLock()
-	res, err = pollingClient.Do(newOpenReq(wsurl + "?sid=" + sid))
-	lock.RUnlock()
-	assert.Nil(err)
-	assert.Equal(200, res.StatusCode)
-	bodyBytes, err = ioutil.ReadAll(res.Body)
-	assert.Contains(string(bodyBytes), "6")
-	time.Sleep(20 * time.Millisecond)
-
-}
 func getURL(addr string) string {
 	u, _ := url.Parse(addr)
 	u.Scheme = "ws"

@@ -186,20 +186,31 @@ func (c *serverConn) Close() error {
 	} else {
 		c.writerLocker.Unlock()
 	}
-	c.writerLocker.Lock()
-	defer c.writerLocker.Unlock()
-	err := t.Close()
-	return err
+	return t.Close()
 }
 
 func (c *serverConn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	transportName := r.URL.Query().Get("transport")
-	if c.getCurrentName() != transportName {
-		// Don't allow from websocket upgrade to polling
-		if c.getCurrentName() == websocketProtocol {
-			w.WriteHeader(http.StatusOK)
-			return
+	c.transportLocker.RLock()
+	current := c.current
+	currentName := c.currentName
+	c.transportLocker.RUnlock()
+	// Don't allow from websocket upgrade to polling
+	if currentName == websocketProtocol && currentName != transportName {
+		if r.Method == "POST" {
+			parser.PollingPost(w, r, func(r *parser.PacketDecoder) {
+				if r.Type() == parser.MESSAGE {
+					c.OnPacket(r)
+				}
+			})
+		} else {
+			if err := parser.WriteNoop(w, r); err != nil {
+				log.Println(err)
+			}
 		}
+		return
+	}
+	if currentName != transportName {
 		creater := c.callback.transports().Get(transportName)
 		if creater.Name == "" {
 			http.Error(w, fmt.Sprintf("invalid transport %s", transportName), http.StatusBadRequest)
@@ -213,7 +224,7 @@ func (c *serverConn) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		c.setUpgrading(creater.Name, u)
 		return
 	}
-	c.getCurrent().ServeHTTP(w, r)
+	current.ServeHTTP(w, r)
 }
 
 // Stack formats a stack trace of the calling goroutine
@@ -366,12 +377,6 @@ func (c *serverConn) getCurrent() transport.Server {
 
 	return c.current
 }
-func (c *serverConn) getCurrentName() string {
-	c.transportLocker.RLock()
-	defer c.transportLocker.RUnlock()
-	return c.currentName
-}
-
 func (c *serverConn) getUpgrade() transport.Server {
 	c.transportLocker.RLock()
 	defer c.transportLocker.RUnlock()

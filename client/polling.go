@@ -72,7 +72,12 @@ func (c *Polling) NextReader() (*parser.PacketDecoder, error) {
 	if c.resp == nil {
 		c.resp = c.getResp
 	}
+	if c.resp.StatusCode != 200 {
+		result, _ := ioutil.ReadAll(c.getResp.Body)
+		panic(string(result))
+	}
 	c.payloadDecoder = parser.NewPayloadDecoder(c.getResp.Body)
+
 	return c.payloadDecoder.Next()
 }
 

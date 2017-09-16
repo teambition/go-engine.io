@@ -27,7 +27,7 @@ type Polling struct {
 	getLocker   *Locker
 	postLocker  *Locker
 	state       state
-	stateLocker sync.Mutex
+	stateLocker sync.RWMutex
 }
 
 // NewServer Create a polling server
@@ -191,7 +191,7 @@ func (p *Polling) setState(s state) {
 }
 
 func (p *Polling) getState() state {
-	p.stateLocker.Lock()
-	defer p.stateLocker.Unlock()
+	p.stateLocker.RLock()
+	defer p.stateLocker.RUnlock()
 	return p.state
 }

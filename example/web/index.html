@@ -18,9 +18,12 @@
         path: '/engine.io',
         transports:['polling','websocket']
     });
-
+    var x=1
     socket.on('open', function(){
         $("p").append("open")
+        let data = 'hello world ' + x++;
+        socket.send(data);
+        $("p").append("<br/>SENT: "+ data);
         setInterval("Communication()",1000);
     });
     socket.on('error', function(err){
@@ -32,7 +35,6 @@
     socket.on('close', function(err){
         $("p").append("<br/>close");
     });
-    var x=1
     function Communication(){
         let data = 'hello world ' + x++;
         socket.send(data);

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/hex"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -24,32 +23,44 @@ func main() {
 		for {
 			conn, _ := server.Accept()
 			go func() {
-				log.Println("connected:", conn.Id())
+				log.Println("client connected:", conn.Id())
 				defer func() {
 					conn.Close()
-					log.Println("disconnected:", conn.Id())
+					log.Println("client disconnected:", conn.Id())
 				}()
 				for {
 					messageType, r, err := conn.NextReader()
 					if err != nil {
+						log.Println("server", err)
 						return
 					}
 					b, err := ioutil.ReadAll(r)
 					if err != nil {
+						log.Println("server", err)
 						return
 					}
-					r.Close()
+					err = r.Close()
+					if err != nil {
+						log.Println("server", err)
+					}
 					if messageType == engineio.MessageText {
-						log.Println(messageType, string(b))
+						//	log.Println(messageType, string(b))
 					} else {
-						log.Println(messageType, hex.EncodeToString(b))
+						//	log.Println(messageType, hex.EncodeToString(b))
 					}
 					w, err := conn.NextWriter(messageType)
 					if err != nil {
+						log.Println("server", err)
 						return
 					}
-					w.Write(b)
-					w.Close()
+					_, err = w.Write(b)
+					if err != nil {
+						log.Println("server", err)
+					}
+					err = w.Close()
+					if err != nil {
+						log.Println("server", err)
+					}
 				}
 			}()
 		}
