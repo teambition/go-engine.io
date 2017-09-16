@@ -3,7 +3,6 @@ package polling
 import (
 	"errors"
 	"io"
-	"time"
 )
 
 func MakeSendChan() chan bool {
@@ -21,18 +20,15 @@ func NewWriter(w io.WriteCloser, server *Polling) *Writer {
 		server:      server,
 	}
 }
-
-const writeTimeout = 3 * time.Second
-
 func (w *Writer) notify() (err error) {
-	w.server.stateLocker.RLock()
-	defer w.server.stateLocker.RUnlock()
+	w.server.stateLocker.Lock()
+	defer w.server.stateLocker.Unlock()
 	if w.server.state != stateNormal {
 		return errors.New("Error: use of closed network connection")
 	}
 	select {
 	case w.server.sendChan <- true:
-	case <-time.After(writeTimeout):
+	default:
 	}
 	return
 }

@@ -110,7 +110,6 @@ type serverConn struct {
 	pingInterval    time.Duration
 	pingLocker      sync.Mutex
 	lastPing        time.Time
-	packetLock      sync.Mutex
 }
 
 func (c *serverConn) Id() string {
@@ -238,9 +237,7 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	if s := c.getState(); s != stateNormal && s != stateUpgrading {
 		return
 	}
-	c.packetLock.Lock()
 	defer func() {
-		c.packetLock.Unlock()
 		if err := recover(); err != nil {
 			log.Println(Stack())
 		}
@@ -250,6 +247,7 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 	case parser.CLOSE:
 		c.getCurrent().Close()
 	case parser.PING:
+		c.setPing()
 		t := c.getCurrent()
 		u := c.getUpgrade()
 		if u != nil {
@@ -264,7 +262,6 @@ func (c *serverConn) OnPacket(r *parser.PacketDecoder) {
 		if u != nil {
 			go c.noopLoop()
 		}
-		c.setPing()
 	case parser.MESSAGE:
 		closeChan := make(chan struct{})
 		c.readerChan <- newConnReader(r, closeChan)
