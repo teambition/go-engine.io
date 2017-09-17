@@ -147,12 +147,11 @@ func (c *serverConn) NextWriter(t MessageType) (io.WriteCloser, error) {
 	default:
 		return nil, io.EOF
 	}
-	c.writerLocker.Lock()
 	current := c.getCurrent()
 	if current == nil {
-		c.writerLocker.Unlock()
 		return nil, errors.New("current connection is nil")
 	}
+	c.writerLocker.Lock()
 	ret, err := current.NextWriter(message.MessageType(t), parser.MESSAGE)
 	if err != nil {
 		c.writerLocker.Unlock()
@@ -305,7 +304,7 @@ func (c *serverConn) OnClose(server transport.Server) {
 	}
 	if c.getState() != stateClosing {
 		if t := c.getUpgrade(); server == t {
-			c.setUpgrading("", nil)
+			c.fallbackUpgrading("", nil)
 			return
 		}
 		t := c.getCurrent()
@@ -314,7 +313,7 @@ func (c *serverConn) OnClose(server transport.Server) {
 		}
 		if t := c.getUpgrade(); t != nil {
 			t.Close()
-			c.setUpgrading("", nil)
+			c.fallbackUpgrading("", nil)
 		}
 	}
 	c.closeConn()
@@ -398,9 +397,20 @@ func (c *serverConn) setUpgrading(name string, s transport.Server) {
 	c.setState(stateUpgrading)
 }
 
+func (c *serverConn) fallbackUpgrading(name string, s transport.Server) {
+	c.transportLocker.Lock()
+	defer c.transportLocker.Unlock()
+
+	c.upgradingName = name
+	c.upgrading = s
+	c.setState(stateNormal)
+}
+
 func (c *serverConn) upgraded() {
 	c.transportLocker.Lock()
 	if c.upgrading == nil {
+		c.upgradingName = ""
+		c.setState(stateNormal)
 		c.transportLocker.Unlock()
 		return
 	}
