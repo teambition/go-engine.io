@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"io"
 	"runtime"
+	"strings"
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestStringPayload(t *testing.T) {
@@ -172,41 +174,41 @@ func TestBinaryPayload(t *testing.T) {
 }
 
 func TestParallelEncode(t *testing.T) {
+	assert := assert.New(t)
+
 	prev := runtime.GOMAXPROCS(10)
 	defer runtime.GOMAXPROCS(prev)
 
-	Convey("Test parallel encode", t, func() {
-		c := make(chan int)
-		max := 1000
-		buf1 := bytes.NewBuffer(nil)
-		buf2 := bytes.NewBuffer(nil)
-		encoder := NewPayloadEncoder(true)
-		for i := 0; i < max; i++ {
-			go func() {
-				e, _ := encoder.NextString(MESSAGE)
-				e.Write([]byte("1234"))
-				e.Close()
-				c <- 1
-			}()
-		}
-		for i := 0; i < max/2; i++ {
-			<-c
-		}
-		err := encoder.EncodeTo(buf1)
-		So(err, ShouldBeNil)
-		for i := 0; i < max/2; i++ {
-			<-c
-		}
-		err = encoder.EncodeTo(buf2)
-		So(err, ShouldBeNil)
+	c := make(chan int)
+	max := 1000
+	buf1 := bytes.NewBuffer(nil)
+	buf2 := bytes.NewBuffer(nil)
+	encoder := NewPayloadEncoder(true)
+	for i := 0; i < max; i++ {
+		go func() {
+			e, _ := encoder.NextString(MESSAGE)
+			e.Write([]byte("1234"))
+			e.Close()
+			c <- 1
+		}()
+	}
+	for i := 0; i < max/2; i++ {
+		<-c
+	}
+	err := encoder.EncodeTo(buf1)
+	assert.Nil(err)
+	for i := 0; i < max/2; i++ {
+		<-c
+	}
+	err = encoder.EncodeTo(buf2)
+	assert.Nil(err)
 
-		for s := buf1.String(); len(s) > 0; {
-			So(s, ShouldStartWith, "5:41234")
-			s = s[len("5:41234"):]
-		}
-		for s := buf2.String(); len(s) > 0; {
-			So(s, ShouldStartWith, "5:41234")
-			s = s[len("5:41234"):]
-		}
-	})
+	for s := buf1.String(); len(s) > 0; {
+		assert.True(strings.HasPrefix(s, "5:41234"))
+		s = s[len("5:41234"):]
+	}
+	for s := buf2.String(); len(s) > 0; {
+		assert.True(strings.HasPrefix(s, "5:41234"))
+		s = s[len("5:41234"):]
+	}
 }

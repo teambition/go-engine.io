@@ -5,9 +5,12 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
+	"github.com/teambition/go-engine.io/apperrs"
 )
 
 func TestWriter(t *testing.T) {
+	assert := assert.New(t)
 	p := &Polling{
 		state:    stateNormal,
 		sendChan: MakeSendChan(),
@@ -45,7 +48,11 @@ func TestWriter(t *testing.T) {
 			w := newFakeWriteCloser()
 			writer := NewWriter(w, p)
 			err := writer.Close()
-			So(err, ShouldBeNil)
+			if i == 0 {
+				assert.Nil(err)
+			} else {
+				assert.Equal(apperrs.ErrPollingRequestNotFound, err)
+			}
 		}
 
 		select {

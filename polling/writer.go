@@ -1,8 +1,9 @@
 package polling
 
 import (
-	"errors"
 	"io"
+
+	"github.com/teambition/go-engine.io/apperrs"
 )
 
 func MakeSendChan() chan bool {
@@ -20,23 +21,24 @@ func NewWriter(w io.WriteCloser, server *Polling) *Writer {
 		server:      server,
 	}
 }
-func (w *Writer) notify() (err error) {
+func (w *Writer) notify() error {
 	w.server.stateLocker.Lock()
 	defer w.server.stateLocker.Unlock()
 	if w.server.state != stateNormal {
-		return errors.New("Error: use of closed network connection")
+		return apperrs.ErrPollingConnectionClosed
 	}
 	select {
 	case w.server.sendChan <- true:
+		return nil
 	default:
+		return apperrs.ErrPollingRequestNotFound
 	}
-	return
 }
 
 func (w *Writer) Close() (err error) {
-	err = w.notify()
+	err = w.WriteCloser.Close()
 	if err != nil {
 		return
 	}
-	return w.WriteCloser.Close()
+	return w.notify()
 }

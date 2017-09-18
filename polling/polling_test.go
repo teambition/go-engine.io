@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	. "github.com/smartystreets/goconvey/convey"
+	"github.com/stretchr/testify/assert"
 	"github.com/teambition/go-engine.io/client"
 	"github.com/teambition/go-engine.io/message"
 	"github.com/teambition/go-engine.io/parser"
@@ -14,6 +15,7 @@ import (
 )
 
 func TestPolling(t *testing.T) {
+	assert := assert.New(t)
 
 	Convey("Normal", t, func() {
 		s := newServer()
@@ -67,7 +69,7 @@ func TestPolling(t *testing.T) {
 			_, err = w.Write([]byte("abc2"))
 			So(err, ShouldBeNil)
 			err = w.Close()
-			So(err, ShouldBeNil)
+			assert.Equal("polling request not found", err.Error())
 		}
 
 		{
@@ -109,6 +111,10 @@ func TestPolling(t *testing.T) {
 
 		client.Close()
 	})
+
+}
+func TestPollingNormalb64(t *testing.T) {
+	assert := assert.New(t)
 
 	Convey("Normal b64", t, func() {
 		s := newServer()
@@ -162,7 +168,7 @@ func TestPolling(t *testing.T) {
 			_, err = w.Write([]byte("abc2"))
 			So(err, ShouldBeNil)
 			err = w.Close()
-			So(err, ShouldBeNil)
+			assert.Equal("polling request not found", err.Error())
 		}
 
 		{
