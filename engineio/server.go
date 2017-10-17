@@ -19,7 +19,7 @@ type config struct {
 	AllowRequest  func(*http.Request) error
 	AllowUpgrades bool
 	Cookie        string
-	NewId         func(r *http.Request) string
+	NewId         func(r *http.Request) (string, error)
 }
 
 // Server is the server of engine.io.
@@ -101,7 +101,7 @@ func (s *Server) SetCookie(prefix string) {
 }
 
 // SetNewId sets the callback func to generate new connection id. By default, id is generated from remote addr + current time stamp
-func (s *Server) SetNewId(f func(*http.Request) string) {
+func (s *Server) SetNewId(f func(*http.Request) (string, error)) {
 	s.config.NewId = f
 }
 
@@ -126,13 +126,16 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-
-		sid = s.config.NewId(r)
+		var err error
+		sid, err = s.config.NewId(r)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		if sid == "" {
 			http.Error(w, "empty sid", http.StatusBadRequest)
 			return
 		}
-		var err error
 		conn, err = newServerConn(sid, w, r, s)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
@@ -166,12 +169,12 @@ func (s *Server) onClose(id string) {
 	s.serverSessions.Remove(id)
 }
 
-func newId(r *http.Request) string {
+func newId(r *http.Request) (string, error) {
 	hash := fmt.Sprintf("%s %s", r.RemoteAddr, time.Now())
 	buf := bytes.NewBuffer(nil)
 	sum := md5.Sum([]byte(hash))
 	encoder := base64.NewEncoder(base64.URLEncoding, buf)
 	encoder.Write(sum[:])
 	encoder.Close()
-	return buf.String()[:20]
+	return buf.String()[:20], nil
 }

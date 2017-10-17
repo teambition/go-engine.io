@@ -163,9 +163,9 @@ func TestCreateServer(t *testing.T) {
 	req, err := http.NewRequest("GET", "/", nil)
 	assert.Nil(err)
 
-	id1 := newId(req)
+	id1, _ := newId(req)
 	time.Sleep(time.Millisecond)
-	id2 := newId(req)
+	id2, _ := newId(req)
 	assert.NotEqual(id1, id2)
 
 	server, err := NewServer([]string{"xwebsocket"})
